@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:">
+  <title>Minecraft Launcher by xBobersonx</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="bg"></canvas>
+  <img id="bg-img" alt="">
+
+  <h1 class="logo">
+    <canvas id="logo-mc"></canvas>
+    <span class="by">by <span>xBobersonx</span></span>
+  </h1>
+
+  <section class="panel">
+    <div class="panel-title">Minecraft Launcher by xBobersonx</div>
+
+    <div class="row">
+      <label for="nick">Twój Nick:</label>
+      <input id="nick" maxlength="16" spellcheck="false">
+    </div>
+    <div class="row">
+      <label for="version">Wersja:</label>
+      <select id="version"><option>Ładowanie…</option></select>
+    </div>
+
+    <div class="buttons">
+      <button id="btn-settings" class="icon" title="Ustawienia">⚙</button>
+      <button id="btn-mods">🔧 Własne mody</button>
+      <button id="btn-play">Uruchom grę</button>
+    </div>
+
+    <div class="progress" hidden><div id="bar"></div></div>
+    <div id="status"></div>
+  </section>
+
+  <div class="app-version" id="app-version"></div>
+
+  <div class="overlay" id="settings" hidden>
+    <div class="dialog">
+      <div class="panel-title">Ustawienia</div>
+
+      <div class="row">
+        <label for="ram">Pamięć RAM:</label>
+        <input type="range" id="ram" min="1" max="16" value="4">
+        <span id="ram-val">4 GB</span>
+      </div>
+
+      <div class="row">
+        <label>Konto:</label>
+        <span id="account">Non-premium (nick)</span>
+      </div>
+      <div class="buttons">
+        <button id="btn-ms">Zaloguj przez Microsoft</button>
+        <button id="btn-logout" hidden>Wyloguj</button>
+      </div>
+
+      <label class="log-label">Konsola:</label>
+      <pre id="log"></pre>
+
+      <div class="buttons">
+        <button id="btn-close-settings">Zamknij</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="background.js"></script>
+  <script src="logo.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>

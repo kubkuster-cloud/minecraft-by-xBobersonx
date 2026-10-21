@@ -1,0 +1,57 @@
+{
+  "name": "minecraft-by-xbobersonx",
+  "version": "1.0.0",
+  "description": "Minecraft launcher by xBobersonx",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win"
+  },
+  "author": "xBobersonx",
+  "license": "MIT",
+  "dependencies": {
+    "adm-zip": "^0.6.1",
+    "minecraft-launcher-core": "^3.18.2",
+    "msmc": "^5.0.5"
+  },
+  "devDependencies": {
+    "@fontsource/press-start-2p": "^5.3.0",
+    "electron": "^41.7.1",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "pl.xbobersonx.launcher",
+    "productName": "Minecraft by xBobersonx",
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer.js",
+      "index.html",
+      "style.css",
+      "background.js",
+      "logo.js",
+      "modpack.js",
+      "modpack.json",
+      "assets/**"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Minecraft by xBobersonx"
+    },
+    "portable": {
+      "artifactName": "MinecraftByXBobersonx-Portable.exe"
+    }
+  }
+}
