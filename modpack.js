@@ -227,7 +227,7 @@ function describe(file) {
     let info = null;
     try {
       const meta = JSON.parse(new AdmZip(file).readAsText("fabric.mod.json"));
-      info = { title: meta.name || meta.id, version: meta.version };
+      info = { title: meta.name || meta.id, version: meta.version, modId: meta.id };
     } catch {}
     infoCache.set(key, info);
   }

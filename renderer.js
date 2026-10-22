@@ -39,7 +39,45 @@ function fillVersions(versions, fabricVersions, packName) {
   }
 }
 
-function setAccount(name) {
+// ---------- Skin (główka obok nicku) ----------
+
+// Domyślna głowa dla konta non-premium, 8x8 pikseli
+const DEFAULT_HEAD = [
+  "HHHHHHHH",
+  "HHHHHHHH",
+  "HSSSSSSH",
+  "SSSSSSSS",
+  "SWBSSBWS",
+  "SSSNNSSS",
+  "SSMMMMSS",
+  "SsSSSSsS",
+];
+const HEAD_COLORS = { H: "#3b2a1a", S: "#b98a6a", s: "#a9785a", W: "#ffffff", B: "#4a3a8a", N: "#8a5a40", M: "#6a3a2a" };
+
+function drawHead(skinUrl) {
+  const ctx = $("head").getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+  const drawDefault = () => {
+    ctx.clearRect(0, 0, 24, 24);
+    DEFAULT_HEAD.forEach((row, y) => [...row].forEach((c, x) => {
+      ctx.fillStyle = HEAD_COLORS[c];
+      ctx.fillRect(x * 3, y * 3, 3, 3);
+    }));
+  };
+  if (!skinUrl) return drawDefault();
+
+  const img = new Image();
+  img.onload = () => {
+    ctx.clearRect(0, 0, 24, 24);
+    ctx.drawImage(img, 8, 8, 8, 8, 0, 0, 24, 24);   // twarz
+    ctx.drawImage(img, 40, 8, 8, 8, 0, 0, 24, 24);  // druga warstwa (czapka, włosy)
+  };
+  img.onerror = drawDefault;
+  img.src = skinUrl;
+}
+
+function setAccount(name, skin) {
+  drawHead(name ? skin : null);
   $("account").textContent = name ? `Microsoft: ${name}` : "Non-premium (nick)";
   $("btn-ms").hidden = !!name;
   $("btn-logout").hidden = !name;
@@ -57,8 +95,9 @@ async function init() {
   $("ram").value = settings.ram || 4;
   $("ram-val").textContent = `${$("ram").value} GB`;
 
+  drawHead(null);
   window.api.restoreLogin().then(account => {
-    if (account) setAccount(account.name);
+    if (account) setAccount(account.name, account.skin);
   });
 
   try {
@@ -423,8 +462,8 @@ $("btn-close-settings").onclick = () => { $("settings").hidden = true; };
 
 $("btn-ms").onclick = async () => {
   try {
-    const { name } = await window.api.loginMicrosoft();
-    setAccount(name);
+    const { name, skin } = await window.api.loginMicrosoft();
+    setAccount(name, skin);
   } catch (err) {
     log(`Logowanie nieudane: ${err}`);
   }
@@ -486,5 +525,58 @@ window.api.on("game:closed", code => {
   document.querySelector(".progress").hidden = true;
   setPlaying(false);
 });
+
+// ---------- Okno „Gra się wysypała” ----------
+let crashReport = null;
+
+window.api.on("game:crash", crash => {
+  crashReport = crash.report;
+  $("crash-reason").textContent = crash.reason;
+  $("crash-details").textContent = crash.details.join("\n");
+  $("crash-details").hidden = crash.details.length === 0;
+  $("btn-crash-report").hidden = !crash.report;
+  setStatus("Gra się wysypała — zobacz okno z wyjaśnieniem");
+
+  const list = $("crash-mods");
+  list.innerHTML = "";
+  for (const mod of crash.mods) {
+    const li = document.createElement("li");
+    li.classList.toggle("off", !mod.enabled);
+    const title = document.createElement("span");
+    title.className = "mod-title";
+    title.textContent = `${mod.title}${mod.tab === "own" ? " (własny mod)" : ""}${mod.library ? " — biblioteka" : ""}`;
+    const button = document.createElement("button");
+    button.textContent = mod.enabled ? "Wyłącz" : "Wyłączony";
+    button.disabled = !mod.enabled;
+    button.onclick = async () => {
+      try {
+        await window.api.toggleMod({ version: crash.version, tab: mod.tab, key: mod.key, enabled: false });
+        li.classList.add("off");
+        button.textContent = "Wyłączony";
+        button.disabled = true;
+      } catch (err) {
+        button.textContent = cleanError(err);
+      }
+    };
+    li.append(title, button);
+    list.appendChild(li);
+  }
+  for (const id of crash.unknown) {
+    const li = document.createElement("li");
+    li.textContent = `${id} (wbudowany w inny mod — nie da się wyłączyć osobno)`;
+    list.appendChild(li);
+  }
+  $("crash-mods-box").hidden = crash.mods.length + crash.unknown.length === 0;
+  $("crash").hidden = false;
+});
+
+const closeCrash = () => { $("crash").hidden = true; };
+$("btn-crash-ok").onclick = closeCrash;
+$("btn-close-crash").onclick = closeCrash;
+$("btn-crash-report").onclick = () => crashReport && window.api.openCrashReport(crashReport);
+$("btn-crash-log").onclick = () => {
+  closeCrash();
+  $("settings").hidden = false;
+};
 
 init();

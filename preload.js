@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld("api", {
   installContent: opts => ipcRenderer.invoke("content:install", opts),
   toggleContent: opts => ipcRenderer.invoke("content:toggle", opts),
   deleteContent: opts => ipcRenderer.invoke("content:delete", opts),
+  openCrashReport: file => ipcRenderer.invoke("crash:open-report", file),
   packName: () => ipcRenderer.invoke("pack:name"),
   fabricVersions: () => ipcRenderer.invoke("fabric:versions"),
   appVersion: () => ipcRenderer.invoke("app:version"),

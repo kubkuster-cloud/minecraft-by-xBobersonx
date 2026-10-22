@@ -399,6 +399,66 @@ button.primary:not(:disabled):hover {
 #mods-list li.on .mod-title { font-weight: 600; color: #2f7d1f; }
 #mods-list li button.small { height: 22px; padding: 0 8px; font-size: 11px; }
 
+/* skin obok nicku */
+#head {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  image-rendering: pixelated;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 3px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+/* okno crasha */
+.crash-dialog { width: 560px; }
+.crash-reason {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px;
+  margin-bottom: 8px;
+  background: rgba(240, 180, 41, 0.15);
+  border: 1px solid rgba(240, 180, 41, 0.6);
+  border-radius: 4px;
+  font-size: 13px;
+  text-shadow: 0 1px 2px #000;
+}
+.crash-reason svg { width: 22px; height: 22px; flex-shrink: 0; }
+#crash-mods {
+  list-style: none;
+  padding: 0;
+  max-height: 140px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #8e9aa8;
+  border-radius: 3px;
+  color: #000;
+}
+#crash-mods li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-bottom: 1px solid #eef0f3;
+}
+#crash-mods li .mod-title { flex: 1; }
+#crash-mods li.off .mod-title { color: #999; text-decoration: line-through; }
+#crash-mods li button { height: 22px; padding: 0 10px; font-size: 11px; }
+#crash-details {
+  max-height: 110px;
+  overflow: auto;
+  margin-top: 8px;
+  padding: 6px;
+  font: 10px Consolas, monospace;
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
+  color: #f0c8c8;
+  white-space: pre-wrap;
+  user-select: text;
+}
+
 /* pasek aktualizacji launchera */
 .update-bar {
   position: fixed;

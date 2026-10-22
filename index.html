@@ -2,7 +2,7 @@
 <html lang="pl">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://cdn.modrinth.com">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://cdn.modrinth.com https://textures.minecraft.net">
   <title>Minecraft Launcher by xBobersonx</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -27,6 +27,7 @@
     <div class="row">
       <label for="nick">Twój Nick:</label>
       <input id="nick" maxlength="16" spellcheck="false">
+      <canvas id="head" width="24" height="24" title="Twój skin"></canvas>
     </div>
     <div class="row">
       <label for="version">Wersja:</label>
@@ -109,6 +110,29 @@
           <svg viewBox="0 0 16 16"><path d="M1 3.5A1.5 1.5 0 0 1 2.5 2h3.6l1.5 1.5h5.9A1.5 1.5 0 0 1 15 5v7.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 12.5z" fill="#d9a520"/></svg>
           Otwórz folder
         </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay" id="crash" hidden>
+    <div class="dialog glass crash-dialog">
+      <div class="panel-title">
+        <span>Gra się wysypała</span>
+        <button id="btn-close-crash" class="title-btn close" title="Zamknij">✕</button>
+      </div>
+      <div class="crash-reason">
+        <svg viewBox="0 0 16 16"><path d="M8 1l7.5 13h-15z" fill="#f0b429"/><path d="M7.2 6h1.6l-.3 4.5h-1zM7.2 11.5h1.6v1.6H7.2z" fill="#3a2a00"/></svg>
+        <span id="crash-reason"></span>
+      </div>
+      <div id="crash-mods-box">
+        <label class="log-label">Podejrzane mody:</label>
+        <ul id="crash-mods"></ul>
+      </div>
+      <pre id="crash-details"></pre>
+      <div class="buttons">
+        <button id="btn-crash-report">Otwórz raport crasha</button>
+        <button id="btn-crash-log">Pokaż konsolę</button>
+        <button id="btn-crash-ok" class="primary">OK</button>
       </div>
     </div>
   </div>

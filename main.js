@@ -8,6 +8,7 @@ const { autoUpdater } = require("electron-updater");
 const { installPack, packName, listMods, setModEnabled, searchMods, installOwnMod } = require("./modpack");
 const { getJava, JVM_FLAGS } = require("./java");
 const content = require("./content");
+const { analyze, findCrashReport } = require("./crash");
 
 const ICON = path.join(__dirname, "assets", "icon.png");
 
@@ -195,7 +196,9 @@ async function finishLogin(xbox) {
   if (!mc.profile) throw new Error("To konto Microsoft nie ma kupionego Minecrafta");
   msMinecraft = mc;
   saveRefreshToken(xbox);
-  return { name: msMinecraft.profile.name };
+  const skins = msMinecraft.profile.skins || [];
+  const skin = (skins.find(s => s.state === "ACTIVE") || skins[0] || {}).url || null;
+  return { name: msMinecraft.profile.name, skin: skin && skin.replace(/^http:/, "https:") };
 }
 
 ipcMain.handle("auth:microsoft", async () => {
@@ -219,6 +222,24 @@ ipcMain.handle("auth:logout", () => {
   msMinecraft = null;
   fs.rmSync(ACCOUNT_FILE, { force: true });
 });
+
+// Analiza crasha + powiązanie podejrzanych modów z plikami, żeby można je było wyłączyć
+function describeCrash(instanceDir, version, log, code, reportFile) {
+  const report = reportFile ? fs.readFileSync(reportFile, "utf8") : "";
+  const { reason, suspects, details } = analyze(log, code, report);
+  const { own, pre } = listMods(instanceDir);
+  const all = [...own.map(m => ({ ...m, tab: "own" })), ...pre.map(m => ({ ...m, tab: "pre" }))];
+  const mods = [];
+  const unknown = [];
+  for (const id of suspects) {
+    const mod = all.find(m => m.modId === id);
+    if (mod) mods.push({ title: mod.title, tab: mod.tab, key: mod.key, enabled: mod.enabled, library: !!mod.library });
+    else unknown.push(id);
+  }
+  return { version, reason, details, mods, unknown, report: reportFile };
+}
+
+ipcMain.handle("crash:open-report", (_e, file) => shell.openPath(file));
 
 ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader }) => {
   const launcher = new Client();
@@ -255,9 +276,20 @@ ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader }) =
     if (!current.includes("renderDistance:")) fs.writeFileSync(options, `${DEFAULT_OPTIONS}\n${current}`);
   }
 
+  // ostatnie linie logu gry — do analizy, jeśli gra się wysypie
+  const logTail = [];
+  const remember = text => {
+    logTail.push(...text.split(/\r?\n/));
+    if (logTail.length > 800) logTail.splice(0, logTail.length - 800);
+  };
+  const startedAt = Date.now();
+
   launcher.on("progress", p => send("game:progress", p));
   launcher.on("download-status", p => send("game:download", p));
-  launcher.on("data", d => send("game:log", d.toString()));
+  launcher.on("data", d => {
+    send("game:log", d.toString());
+    remember(d.toString());
+  });
   launcher.on("debug", d => send("game:log", d.toString()));
   launcher.on("arguments", () => {
     send("game:started");
@@ -266,6 +298,11 @@ ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader }) =
   launcher.on("close", code => {
     showFromTray();
     send("game:closed", code);
+    const instanceDir = loader === "pack" ? packDir(version) : GAME_DIR;
+    const report = findCrashReport(instanceDir, startedAt);
+    if (code !== 0 || report) {
+      send("game:crash", describeCrash(instanceDir, version, logTail.join("\n"), code, report));
+    }
   });
 
   let authorization;
