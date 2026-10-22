@@ -5,6 +5,7 @@ const fs = require("fs");
 const { Client, Authenticator } = require("minecraft-launcher-core");
 const { Auth } = require("msmc");
 const { installPack, packName } = require("./modpack");
+const { getJava, JVM_FLAGS } = require("./java");
 
 const GAME_DIR = path.join(app.getPath("appData"), ".minecraft_by_xbobersonx");
 const SETTINGS_FILE = path.join(GAME_DIR, "launcher_settings.json");
@@ -150,7 +151,14 @@ ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader }) =
     gameVersion.custom = await installFabric(version);
     send("game:log", `Fabric: ${gameVersion.custom}`);
   }
-  const jvmArgs = [];
+  const javaPath = await getJava(version, {
+    runtimeRoot: path.join(GAME_DIR, "runtime"),
+    manifestUrl: MANIFEST_URL,
+    log: msg => send("game:log", msg),
+    progress: p => send("game:progress", p),
+  });
+
+  const jvmArgs = [...JVM_FLAGS];
   if (loader === "pack") {
     const preinstalled = await installPack(packDir(version), version, {
       log: msg => send("game:log", msg),
@@ -180,7 +188,8 @@ ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader }) =
     root: GAME_DIR,
     authorization,
     version: gameVersion,
-    memory: { max: `${ram}G`, min: "1G" },
+    memory: { max: `${ram}G`, min: `${Math.min(2, ram)}G` },
+    javaPath,
     overrides: loader === "pack" ? { gameDirectory: packDir(version) } : {},
     customArgs: jvmArgs,
   });

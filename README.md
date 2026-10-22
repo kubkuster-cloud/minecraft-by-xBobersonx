@@ -8,6 +8,8 @@ Launcher do Minecrafta w stylu starego „Minecraft by Zyczu”, z wbudowaną pa
 - Mody pobierane z [Modrinth](https://modrinth.com) zawsze w wersji pasującej do wybranej wersji gry, razem z wymaganymi bibliotekami
 - **Własne mody** — przycisk otwiera folder `mods`; mody z paczki leżą osobno w `mods/preinstalled`, więc twoje mody się z nimi nie mieszają
 - **Konto Microsoft** (z zapamiętywaniem logowania) albo **non-premium** (sam nick)
+- **Automatyczna Java** — launcher sam pobiera z serwerów Mojang właściwą Javę dla danej wersji gry (Java 21 dla nowych, Java 8 dla starych), nie trzeba jej instalować
+- **Zoptymalizowane ustawienia JVM** (G1GC) — mniej przycięć przy dużej liczbie modów
 - Ustawienie ilości RAM-u i konsola z logami gry
 - Napis „xBobersonx” na dole ekranu głównego w grze
 

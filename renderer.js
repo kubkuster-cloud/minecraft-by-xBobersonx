@@ -129,6 +129,7 @@ function setPlaying(on) {
 
 const STAGES = {
   mods: "Mody",
+  java: "Java",
   assets: "Zasoby gry",
   "assets-copy": "Kopiowanie zasobów",
   classes: "Biblioteki",
