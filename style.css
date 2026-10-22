@@ -285,6 +285,74 @@ button.primary:not(:disabled):hover {
   user-select: text;
 }
 
+/* ---------- Okno modów ---------- */
+.mods-dialog { width: 620px; }
+
+.mods-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+}
+.mods-toolbar input { flex: 0 0 180px; margin-bottom: 4px; }
+
+.tabs { display: flex; gap: 2px; }
+.tab {
+  height: 30px;
+  border-radius: 4px 4px 0 0;
+  border-bottom: 0;
+  background: linear-gradient(#d8d8d8, #bdbdbd);
+  color: #333;
+}
+.tab.active {
+  background: linear-gradient(#ffffff, #f0f0f0);
+  color: #000;
+  font-weight: 600;
+  border-color: #8e9aa8;
+}
+.tab .count { font-weight: normal; color: #666; }
+
+#mods-list {
+  list-style: none;
+  padding: 0;
+  height: 300px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #8e9aa8;
+  border-radius: 0 3px 3px 3px;
+  color: #000;
+}
+#mods-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid #eef0f3;
+  cursor: pointer;
+}
+#mods-list li:nth-child(even) { background: #f7f9fb; }
+#mods-list li:hover { background: #e5f3fb; }
+#mods-list li.off .mod-title { color: #999; text-decoration: line-through; }
+#mods-list li.empty { justify-content: center; color: #777; cursor: default; height: 100%; border: 0; background: none; }
+#mods-list input[type=checkbox] {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: #4caf2a;
+  cursor: pointer;
+}
+.mod-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mod-version { color: #888; font-size: 11px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mod-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: #e8ecf1;
+  color: #5a6675;
+}
+#mods-hint { margin-top: 6px; min-height: 15px; font-size: 11px; color: #f0f0f0; text-shadow: 0 1px 2px #000; }
+
 /* ---------- Animacje ---------- */
 @keyframes slide-in { from { opacity: 0; transform: translateY(16px); } }
 @keyframes drop-in { from { opacity: 0; transform: translateY(-12px); } }

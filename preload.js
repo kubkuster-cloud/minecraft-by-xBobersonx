@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld("api", {
   restoreLogin: () => ipcRenderer.invoke("auth:restore"),
   launch: opts => ipcRenderer.invoke("game:launch", opts),
   openMods: target => ipcRenderer.invoke("folder:mods", target),
+  listMods: version => ipcRenderer.invoke("mods:list", { version }),
+  toggleMod: opts => ipcRenderer.invoke("mods:toggle", opts),
   packName: () => ipcRenderer.invoke("pack:name"),
   fabricVersions: () => ipcRenderer.invoke("fabric:versions"),
   appVersion: () => ipcRenderer.invoke("app:version"),

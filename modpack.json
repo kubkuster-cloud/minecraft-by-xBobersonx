@@ -1,6 +1,6 @@
 {
   "name": "xBobersonx Mods",
-  "mods": [
+  "libraries": [
     "fabric-api",
     "fabric-language-kotlin",
     "architectury-api",
@@ -11,8 +11,9 @@
     "forge-config-api-port",
     "resourceful-config",
     "craterlib",
-    "libjf",
-
+    "libjf"
+  ],
+  "mods": [
     "sodium",
     "sodium-extra",
     "iris",

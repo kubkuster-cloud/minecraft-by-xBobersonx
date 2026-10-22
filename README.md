@@ -6,7 +6,7 @@ Launcher do Minecrafta w stylu starego „Minecraft by Zyczu”, z wbudowaną pa
 
 - **Paczka xBobersonx Mods** — ponad 70 modów (Sodium, Iris, Lithium, Flashback, Simple Voice Chat, Zoomify, Silly's Auto Totem i wiele innych), instalowanych automatycznie dla każdej wersji Minecrafta obsługiwanej przez Fabric
 - Mody pobierane z [Modrinth](https://modrinth.com) zawsze w wersji pasującej do wybranej wersji gry, razem z wymaganymi bibliotekami
-- **Własne mody** — przycisk otwiera folder `mods`; mody z paczki leżą osobno w `mods/preinstalled`, więc twoje mody się z nimi nie mieszają
+- **Własne mody** — okno z zakładkami „Własne mody” i „Preinstalled”, w którym każdy mod można wyłączyć jednym kliknięciem (bez usuwania — plik dostaje końcówkę `.disabled`); mody z paczki leżą osobno w `mods/preinstalled`, a wyłączone zostają wyłączone także po aktualizacji paczki
 - **Konto Microsoft** (z zapamiętywaniem logowania) albo **non-premium** (sam nick)
 - **Automatyczna Java** — launcher sam pobiera z serwerów Mojang właściwą Javę dla danej wersji gry (Java 21 dla nowych, Java 8 dla starych), nie trzeba jej instalować
 - **Zoptymalizowane ustawienia JVM** (G1GC) — mniej przycięć przy dużej liczbie modów
@@ -34,7 +34,7 @@ npm run dist     # buduje pliki .exe do folderu dist/
 
 ## Zmiana listy modów
 
-Lista modów jest w pliku [`modpack.json`](modpack.json). Każda pozycja to nazwa moda z adresu na Modrinth, np. dla `modrinth.com/mod/sodium` wpisz `sodium`. Po zmianie zbuduj launcher ponownie (`npm run dist`).
+Lista modów jest w pliku [`modpack.json`](modpack.json): `mods` to zwykłe mody, `libraries` to biblioteki (w launcherze oznaczone jako „biblioteka”). Każda pozycja to nazwa moda z adresu na Modrinth, np. dla `modrinth.com/mod/sodium` wpisz `sodium`. Wymagane zależności launcher dobiera sam. Po zmianie zbuduj launcher ponownie (`npm run dist`).
 
 ## Gdzie są pliki gry
 

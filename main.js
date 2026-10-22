@@ -4,7 +4,7 @@ const os = require("os");
 const fs = require("fs");
 const { Client, Authenticator } = require("minecraft-launcher-core");
 const { Auth } = require("msmc");
-const { installPack, packName } = require("./modpack");
+const { installPack, packName, listMods, setModEnabled } = require("./modpack");
 const { getJava, JVM_FLAGS } = require("./java");
 
 const GAME_DIR = path.join(app.getPath("appData"), ".minecraft_by_xbobersonx");
@@ -24,6 +24,7 @@ function createWindow() {
     maximizable: false,
     title: "Minecraft Launcher by xBobersonx",
     backgroundColor: "#6fa8e8",
+    icon: path.join(__dirname, "assets", "icon.png"),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -89,9 +90,13 @@ function packDir(version) {
 
 ipcMain.handle("pack:name", () => packName);
 
-ipcMain.handle("folder:mods", (_e, { version, loader } = {}) => {
+ipcMain.handle("mods:list", (_e, { version }) => listMods(packDir(version)));
+ipcMain.handle("mods:toggle", (_e, { version, tab, key, enabled }) =>
+  setModEnabled(packDir(version), tab, key, enabled));
+
+ipcMain.handle("folder:mods", (_e, { version, loader, preinstalled } = {}) => {
   const base = loader === "pack" ? packDir(version) : GAME_DIR;
-  const dir = path.join(base, "mods");
+  const dir = path.join(base, "mods", preinstalled ? "preinstalled" : "");
   fs.mkdirSync(dir, { recursive: true });
   return shell.openPath(dir);
 });

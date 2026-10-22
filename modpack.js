@@ -35,7 +35,7 @@ function sha1(file) {
 // Zwraca listę plików do pobrania: mody z paczki + ich wymagane zależności
 async function resolve(gameVersion, log) {
   const files = new Map(); // project_id -> plik
-  const queue = [...PACK.mods];
+  const queue = [...PACK.libraries, ...PACK.mods];
   const seen = new Set();
 
   while (queue.length) {
@@ -134,6 +134,13 @@ async function installPack(instanceDir, gameVersion, { log, progress }) {
   log(`[paczka] Sprawdzanie modów dla ${gameVersion}...`);
   const files = await resolve(gameVersion, log);
 
+  // wyłączone mody wracają na czas aktualizacji, potem są wyłączane ponownie
+  for (const name of fs.readdirSync(modsDir)) {
+    if (name.endsWith(DISABLED)) {
+      fs.renameSync(path.join(modsDir, name), path.join(modsDir, name.slice(0, -DISABLED.length)));
+    }
+  }
+
   for (let i = 0; i < files.length; i++) {
     progress({ type: "mods", task: i, total: files.length });
     await download(files[i], modsDir, log);
@@ -143,16 +150,109 @@ async function installPack(instanceDir, gameVersion, { log, progress }) {
   await fixExactDeps(files, modsDir, log);
 
   // sprzątanie dopiero po fixExactDeps, żeby nie kasować podmienionych wersji
-  let previous = [];
-  try { previous = JSON.parse(fs.readFileSync(listFile, "utf8")); } catch {}
   const wanted = new Set(files.map(f => f.name));
-  for (const old of previous) {
-    if (!wanted.has(old)) fs.rmSync(path.join(modsDir, old), { force: true });
+  for (const old of readPackList(instanceDir)) {
+    if (!wanted.has(old.name)) fs.rmSync(path.join(modsDir, old.name), { force: true });
   }
 
-  fs.writeFileSync(listFile, JSON.stringify(files.map(f => f.name), null, 2));
-  log(`[paczka] Gotowe: ${files.length} modów`);
+  // biblioteka = wpisana w „libraries” albo dobrana automatycznie jako zależność
+  const list = files.map(f => ({ name: f.name, project: f.project, library: !PACK.mods.includes(f.project) }));
+  fs.writeFileSync(listFile, JSON.stringify(list, null, 2));
+
+  const disabled = readDisabled(instanceDir);
+  for (const f of list) {
+    if (disabled.has(f.project)) renameMod(modsDir, f.name, false);
+  }
+  log(`[paczka] Gotowe: ${files.length} modów${disabled.size ? `, wyłączone: ${disabled.size}` : ""}`);
   return modsDir;
 }
 
-module.exports = { installPack, packName: PACK.name };
+// ---------- Zarządzanie modami (okno „Własne mody”) ----------
+
+const DISABLED = ".disabled";
+const infoCache = new Map(); // ścieżka+mtime -> { name, version }
+
+// Lista paczki; starsze wersje zapisywały same nazwy plików
+function readPackList(instanceDir) {
+  try {
+    const list = JSON.parse(fs.readFileSync(path.join(instanceDir, ".xbobersonx-pack.json"), "utf8"));
+    return list.map(x => (typeof x === "string" ? { name: x, project: x, library: false } : x));
+  } catch {
+    return [];
+  }
+}
+
+function disabledFile(instanceDir) {
+  return path.join(instanceDir, ".xbobersonx-disabled.json");
+}
+
+// Projekty z paczki wyłączone przez gracza (przetrwają aktualizacje paczki)
+function readDisabled(instanceDir) {
+  try { return new Set(JSON.parse(fs.readFileSync(disabledFile(instanceDir), "utf8"))); } catch { return new Set(); }
+}
+
+function renameMod(dir, jarName, enabled) {
+  const on = path.join(dir, jarName);
+  const off = on + DISABLED;
+  if (enabled && fs.existsSync(off)) fs.renameSync(off, on);
+  if (!enabled && fs.existsSync(on)) fs.renameSync(on, off);
+}
+
+function describe(file) {
+  const stat = fs.statSync(file);
+  const key = `${file}|${stat.mtimeMs}`;
+  if (!infoCache.has(key)) {
+    let info = null;
+    try {
+      const meta = JSON.parse(new AdmZip(file).readAsText("fabric.mod.json"));
+      info = { title: meta.name || meta.id, version: meta.version };
+    } catch {}
+    infoCache.set(key, info);
+  }
+  return infoCache.get(key);
+}
+
+function entry(dir, jarName, extra) {
+  const enabled = fs.existsSync(path.join(dir, jarName));
+  const file = path.join(dir, enabled ? jarName : jarName + DISABLED);
+  if (!fs.existsSync(file)) return null;
+  const info = describe(file) || { title: jarName.replace(/\.jar$/, ""), version: "" };
+  return { file: jarName, enabled, ...info, ...extra };
+}
+
+// Mody gracza (mods/) i mody z paczki (mods/preinstalled) danej wersji
+function listMods(instanceDir) {
+  const ownDir = path.join(instanceDir, "mods");
+  const preDir = path.join(ownDir, "preinstalled");
+  const own = fs.existsSync(ownDir)
+    ? fs.readdirSync(ownDir)
+        .filter(n => n.endsWith(".jar") || n.endsWith(".jar" + DISABLED))
+        .map(n => entry(ownDir, n.endsWith(DISABLED) ? n.slice(0, -DISABLED.length) : n, { key: n.replace(DISABLED, "") }))
+    : [];
+  const pre = readPackList(instanceDir).map(f => entry(preDir, f.name, { key: f.project, library: f.library }));
+  const byTitle = (a, b) => a.title.localeCompare(b.title);
+  return { own: own.filter(Boolean).sort(byTitle), pre: pre.filter(Boolean).sort(byTitle) };
+}
+
+// Włącza/wyłącza mod. Wyłączony mod dostaje końcówkę .disabled — Fabric go pomija, plik zostaje.
+function setModEnabled(instanceDir, tab, key, enabled) {
+  const ownDir = path.join(instanceDir, "mods");
+  try {
+    if (tab === "own") {
+      renameMod(ownDir, key, enabled);
+      return;
+    }
+    const mod = readPackList(instanceDir).find(f => f.project === key);
+    if (!mod) return;
+    const disabled = readDisabled(instanceDir);
+    if (enabled) disabled.delete(key);
+    else disabled.add(key);
+    renameMod(path.join(ownDir, "preinstalled"), mod.name, enabled);
+    fs.writeFileSync(disabledFile(instanceDir), JSON.stringify([...disabled], null, 2));
+  } catch (err) {
+    if (err.code === "EBUSY" || err.code === "EPERM") throw new Error("Zamknij grę, zanim zmienisz mody");
+    throw err;
+  }
+}
+
+module.exports = { installPack, packName: PACK.name, listMods, setModEnabled };

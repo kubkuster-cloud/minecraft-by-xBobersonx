@@ -80,10 +80,102 @@ $("version").onchange = persist;
 $("ram").oninput = () => { $("ram-val").textContent = `${$("ram").value} GB`; };
 $("ram").onchange = persist;
 
-$("btn-mods").onclick = () => {
-  const [version, loader] = $("version").value.split("|");
-  window.api.openMods({ version, loader });
+// ---------- Okno „Własne mody” ----------
+let modsTab = "own";
+let modsData = { own: [], pre: [] };
+
+function modsVersion() {
+  return $("version").value.split("|")[0];
+}
+
+async function loadMods() {
+  modsData = await window.api.listMods(modsVersion());
+  $("count-own").textContent = `(${modsData.own.length})`;
+  $("count-pre").textContent = `(${modsData.pre.length})`;
+  renderMods();
+}
+
+function renderMods() {
+  const query = $("mods-search").value.trim().toLowerCase();
+  const list = $("mods-list");
+  const mods = modsData[modsTab].filter(m => !query || m.title.toLowerCase().includes(query) || m.file.toLowerCase().includes(query));
+  list.innerHTML = "";
+
+  if (mods.length === 0) {
+    const li = document.createElement("li");
+    li.className = "empty";
+    li.textContent = query ? "Nic nie znaleziono"
+      : modsTab === "own" ? "Brak własnych modów — kliknij „Otwórz folder” i wrzuć pliki .jar"
+      : "Mody z paczki pojawią się po pierwszym kliknięciu „Uruchom grę” na tej wersji";
+    list.appendChild(li);
+  }
+
+  for (const mod of mods) {
+    const li = document.createElement("li");
+    li.classList.toggle("off", !mod.enabled);
+    li.title = mod.file;
+
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = mod.enabled;
+
+    const title = document.createElement("span");
+    title.className = "mod-title";
+    title.textContent = mod.title;
+    li.append(box, title);
+
+    if (mod.library) {
+      const tag = document.createElement("span");
+      tag.className = "mod-tag";
+      tag.textContent = "biblioteka";
+      li.appendChild(tag);
+    }
+    const version = document.createElement("span");
+    version.className = "mod-version";
+    version.textContent = mod.version;
+    li.appendChild(version);
+
+    const toggle = async () => {
+      const enabled = !mod.enabled;
+      try {
+        await window.api.toggleMod({ version: modsVersion(), tab: modsTab, key: mod.key, enabled });
+        mod.enabled = enabled;
+        $("mods-hint").textContent = mod.library && !enabled
+          ? "Uwaga: inne mody mogą wymagać tej biblioteki — gra może się nie uruchomić."
+          : "";
+      } catch (err) {
+        $("mods-hint").textContent = String(err.message || err).replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
+      }
+      renderMods();
+    };
+    li.onclick = e => { if (e.target !== box) toggle(); };
+    box.onchange = toggle;
+    list.appendChild(li);
+  }
+}
+
+function setModsTab(tab) {
+  modsTab = tab;
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === tab));
+  $("mods-hint").textContent = "";
+  renderMods();
+}
+
+$("btn-mods").onclick = async () => {
+  const option = $("version").selectedOptions[0];
+  if (!option || !option.value.includes("|")) return;
+  $("mods-title").textContent = `Mody — ${option.textContent}`;
+  $("mods-search").value = "";
+  setModsTab("own");
+  $("mods").hidden = false;
+  await loadMods();
 };
+document.querySelectorAll(".tab").forEach(t => { t.onclick = () => setModsTab(t.dataset.tab); });
+$("mods-search").oninput = renderMods;
+$("btn-close-mods").onclick = () => { $("mods").hidden = true; };
+$("btn-mods-folder").onclick = () =>
+  window.api.openMods({ version: modsVersion(), loader: "pack", preinstalled: modsTab === "pre" });
+window.addEventListener("focus", () => { if (!$("mods").hidden) loadMods(); });
 $("btn-settings").onclick = () => { $("settings").hidden = false; };
 $("btn-close-settings").onclick = () => { $("settings").hidden = true; };
 
