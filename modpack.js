@@ -23,40 +23,61 @@ async function listVersions(project, gameVersion) {
   return (await getJson(`${API}/project/${project}/version?${query}`)) || [];
 }
 
+const PARALLEL = 8;
+
 function toFile(version, project, versions) {
   const file = version.files.find(f => f.primary) || version.files[0];
-  return { name: file.filename, url: file.url, sha1: file.hashes.sha1, project, versions };
+  return { name: file.filename, url: file.url, sha1: file.hashes.sha1, project, id: version.project_id, versions };
 }
 
 function sha1(file) {
   return crypto.createHash("sha1").update(fs.readFileSync(file)).digest("hex");
 }
 
-// Zwraca listę plików do pobrania: mody z paczki + ich wymagane zależności
-async function resolve(gameVersion, log) {
+// Wykonuje fn dla każdego elementu, najwyżej `limit` naraz; wyniki w tej samej kolejności
+async function pool(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i], i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+// Zwraca listę plików do pobrania: podane projekty + ich wymagane zależności.
+// Sprawdza Modrinth falami: najpierw wszystkie projekty naraz, potem ich zależności itd.
+// `skip` to id projektów, które już są zainstalowane (nie pobieramy ich drugi raz).
+async function resolve(projects, gameVersion, log, skip = new Set()) {
   const files = new Map(); // project_id -> plik
-  const queue = [...PACK.libraries, ...PACK.mods];
   const seen = new Set();
+  let wave = projects;
 
-  while (queue.length) {
-    const project = queue.shift();
-    if (seen.has(project)) continue;
-    seen.add(project);
+  while (wave.length) {
+    const todo = [...new Set(wave)].filter(p => !seen.has(p));
+    todo.forEach(p => seen.add(p));
+    const found = await pool(todo, PARALLEL, p => listVersions(p, gameVersion));
+    wave = [];
 
-    const versions = await listVersions(project, gameVersion);
-    // preferuje wydania „release”; dokładne wymagania innych modów poprawia fixExactDeps
-    const version = versions.find(v => v.version_type === "release") || versions[0];
-    if (!version) {
-      log(`[paczka] ${project}: brak wersji dla ${gameVersion}, pomijam`);
-      continue;
-    }
-    if (files.has(version.project_id)) continue;
-    seen.add(version.project_id);
-    files.set(version.project_id, toFile(version, project, versions));
+    todo.forEach((project, i) => {
+      const versions = found[i];
+      // preferuje wydania „release”; dokładne wymagania innych modów poprawia fixExactDeps
+      const version = versions.find(v => v.version_type === "release") || versions[0];
+      if (!version) {
+        log(`[paczka] ${project}: brak wersji dla ${gameVersion}, pomijam`);
+        return;
+      }
+      seen.add(version.project_id);
+      if (files.has(version.project_id) || skip.has(version.project_id)) return;
+      files.set(version.project_id, toFile(version, project, versions));
 
-    for (const dep of version.dependencies || []) {
-      if (dep.dependency_type === "required" && dep.project_id) queue.push(dep.project_id);
-    }
+      for (const dep of version.dependencies || []) {
+        if (dep.dependency_type === "required" && dep.project_id) wave.push(dep.project_id);
+      }
+    });
   }
   return [...files.values()];
 }
@@ -132,7 +153,7 @@ async function installPack(instanceDir, gameVersion, { log, progress }) {
   if (fs.existsSync(oldListFile)) fs.renameSync(oldListFile, listFile);
 
   log(`[paczka] Sprawdzanie modów dla ${gameVersion}...`);
-  const files = await resolve(gameVersion, log);
+  const files = await resolve([...PACK.libraries, ...PACK.mods], gameVersion, log);
 
   // wyłączone mody wracają na czas aktualizacji, potem są wyłączane ponownie
   for (const name of fs.readdirSync(modsDir)) {
@@ -141,11 +162,12 @@ async function installPack(instanceDir, gameVersion, { log, progress }) {
     }
   }
 
-  for (let i = 0; i < files.length; i++) {
-    progress({ type: "mods", task: i, total: files.length });
-    await download(files[i], modsDir, log);
-  }
-  progress({ type: "mods", task: files.length, total: files.length });
+  let done = 0;
+  progress({ type: "mods", task: 0, total: files.length });
+  await pool(files, PARALLEL, async f => {
+    await download(f, modsDir, log);
+    progress({ type: "mods", task: ++done, total: files.length });
+  });
 
   await fixExactDeps(files, modsDir, log);
 
@@ -156,7 +178,7 @@ async function installPack(instanceDir, gameVersion, { log, progress }) {
   }
 
   // biblioteka = wpisana w „libraries” albo dobrana automatycznie jako zależność
-  const list = files.map(f => ({ name: f.name, project: f.project, library: !PACK.mods.includes(f.project) }));
+  const list = files.map(f => ({ name: f.name, project: f.project, id: f.id, library: !PACK.mods.includes(f.project) }));
   fs.writeFileSync(listFile, JSON.stringify(list, null, 2));
 
   const disabled = readDisabled(instanceDir);
@@ -255,4 +277,59 @@ function setModEnabled(instanceDir, tab, key, enabled) {
   }
 }
 
-module.exports = { installPack, packName: PACK.name, listMods, setModEnabled };
+// ---------- Wyszukiwarka modów (zakładka „Szukaj modów”) ----------
+
+// Własne mody zainstalowane z wyszukiwarki: { nazwa pliku: id projektu na Modrinth }
+function ownFile(instanceDir) {
+  return path.join(instanceDir, ".xbobersonx-own.json");
+}
+
+function readOwn(instanceDir) {
+  try { return JSON.parse(fs.readFileSync(ownFile(instanceDir), "utf8")); } catch { return {}; }
+}
+
+// Id projektów, które już są w paczce albo we własnych modach (te, których pliki wciąż istnieją)
+function installedIds(instanceDir) {
+  const modsDir = path.join(instanceDir, "mods");
+  const exists = (dir, name) => fs.existsSync(path.join(dir, name)) || fs.existsSync(path.join(dir, name + DISABLED));
+  const ids = new Set(readPackList(instanceDir).filter(f => f.id).map(f => f.id));
+  for (const [name, id] of Object.entries(readOwn(instanceDir))) {
+    if (exists(modsDir, name)) ids.add(id);
+  }
+  return ids;
+}
+
+async function searchMods(instanceDir, gameVersion, query) {
+  const facets = JSON.stringify([["categories:fabric"], [`versions:${gameVersion}`], ["project_type:mod"]]);
+  const index = query ? "relevance" : "downloads";
+  const data = await getJson(`${API}/search?limit=30&index=${index}&query=${encodeURIComponent(query)}&facets=${encodeURIComponent(facets)}`);
+  const installed = installedIds(instanceDir);
+  return data.hits.map(h => ({
+    id: h.project_id,
+    title: h.title,
+    description: h.description,
+    author: h.author,
+    downloads: h.downloads,
+    icon: h.icon_url,
+    installed: installed.has(h.project_id),
+  }));
+}
+
+// Instaluje mod do mods/ razem z wymaganymi bibliotekami, których jeszcze nie ma
+async function installOwnMod(instanceDir, gameVersion, projectId, log) {
+  const modsDir = path.join(instanceDir, "mods");
+  fs.mkdirSync(modsDir, { recursive: true });
+  const skip = installedIds(instanceDir);
+  if (skip.has(projectId)) throw new Error("Ten mod jest już zainstalowany");
+
+  const files = await resolve([projectId], gameVersion, log, skip);
+  if (!files.some(f => f.id === projectId)) throw new Error(`Ten mod nie ma wersji dla ${gameVersion}`);
+
+  await pool(files, PARALLEL, f => download(f, modsDir, log));
+  const own = readOwn(instanceDir);
+  for (const f of files) own[f.name] = f.id;
+  fs.writeFileSync(ownFile(instanceDir), JSON.stringify(own, null, 2));
+  return files.map(f => f.name);
+}
+
+module.exports = { installPack, packName: PACK.name, listMods, setModEnabled, searchMods, installOwnMod };

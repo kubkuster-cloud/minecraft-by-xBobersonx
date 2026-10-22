@@ -16,6 +16,7 @@
   "mods": [
     "sodium",
     "sodium-extra",
+    "dynamic-fps",
     "iris",
     "lithium",
     "ferrite-core",

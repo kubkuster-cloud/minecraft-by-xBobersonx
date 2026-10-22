@@ -96,6 +96,7 @@ async function loadMods() {
 }
 
 function renderMods() {
+  if (modsTab === "search") return renderSearch();
   const query = $("mods-search").value.trim().toLowerCase();
   const list = $("mods-list");
   const mods = modsData[modsTab].filter(m => !query || m.title.toLowerCase().includes(query) || m.file.toLowerCase().includes(query));
@@ -154,11 +155,110 @@ function renderMods() {
   }
 }
 
+// ---------- Zakładka „Szukaj modów” (Modrinth) ----------
+let searchResults = null; // null = trwa wyszukiwanie
+let searchError = "";
+let searchTimer = null;
+let searchSeq = 0;
+
+function niceNumber(n) {
+  return n >= 1e6 ? `${(n / 1e6).toFixed(1)} mln` : n >= 1e3 ? `${Math.round(n / 1e3)} tys.` : String(n);
+}
+
+function cleanError(err) {
+  return String(err.message || err).replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
+}
+
+async function doSearch() {
+  const seq = ++searchSeq;
+  searchResults = null;
+  searchError = "";
+  renderSearch();
+  try {
+    const results = await window.api.searchMods({ version: modsVersion(), query: $("mods-search").value.trim() });
+    if (seq !== searchSeq) return;
+    searchResults = results;
+  } catch (err) {
+    if (seq !== searchSeq) return;
+    searchResults = [];
+    searchError = "Nie udało się połączyć z Modrinth — sprawdź internet";
+  }
+  renderSearch();
+}
+
+function renderSearch() {
+  const list = $("mods-list");
+  list.innerHTML = "";
+  if (!searchResults || searchResults.length === 0) {
+    const li = document.createElement("li");
+    li.className = "empty";
+    li.textContent = !searchResults ? "Szukanie…" : searchError || "Nic nie znaleziono";
+    list.appendChild(li);
+    return;
+  }
+
+  for (const mod of searchResults) {
+    const li = document.createElement("li");
+    li.className = "result";
+
+    const icon = document.createElement("img");
+    icon.className = "result-icon";
+    if (mod.icon) icon.src = mod.icon;
+    icon.alt = "";
+
+    const body = document.createElement("div");
+    body.className = "result-body";
+    const title = document.createElement("div");
+    title.className = "result-title";
+    title.textContent = mod.title + " ";
+    const author = document.createElement("small");
+    author.textContent = `od ${mod.author}`;
+    title.appendChild(author);
+    const desc = document.createElement("div");
+    desc.className = "result-desc";
+    desc.textContent = mod.description;
+    const meta = document.createElement("div");
+    meta.className = "result-meta";
+    meta.textContent = `${niceNumber(mod.downloads)} pobrań`;
+    body.append(title, desc, meta);
+
+    const button = document.createElement("button");
+    button.textContent = mod.installed ? "Zainstalowany" : "Zainstaluj";
+    button.disabled = mod.installed;
+    if (!mod.installed) button.classList.add("primary");
+    button.onclick = async () => {
+      button.disabled = true;
+      button.textContent = "Instalowanie…";
+      try {
+        const files = await window.api.installMod({ version: modsVersion(), id: mod.id });
+        mod.installed = true;
+        button.textContent = "Zainstalowany";
+        button.classList.remove("primary");
+        $("mods-hint").textContent = files.length > 1
+          ? `Zainstalowano ${mod.title} + ${files.length - 1} wymaganych bibliotek`
+          : `Zainstalowano ${mod.title}`;
+        await loadMods();
+      } catch (err) {
+        button.disabled = false;
+        button.textContent = "Zainstaluj";
+        $("mods-hint").textContent = cleanError(err);
+      }
+    };
+
+    li.append(icon, body, button);
+    list.appendChild(li);
+  }
+}
+
 function setModsTab(tab) {
   modsTab = tab;
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === tab));
   $("mods-hint").textContent = "";
-  renderMods();
+  $("mods-search").value = "";
+  $("mods-search").placeholder = tab === "search" ? "Szukaj na Modrinth…" : "Szukaj…";
+  $("btn-mods-folder").hidden = tab === "search";
+  if (tab === "search") doSearch();
+  else renderMods();
 }
 
 $("btn-mods").onclick = async () => {
@@ -171,12 +271,31 @@ $("btn-mods").onclick = async () => {
   await loadMods();
 };
 document.querySelectorAll(".tab").forEach(t => { t.onclick = () => setModsTab(t.dataset.tab); });
-$("mods-search").oninput = renderMods;
+$("mods-search").oninput = () => {
+  if (modsTab !== "search") return renderMods();
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(doSearch, 400);
+};
 $("btn-close-mods").onclick = () => { $("mods").hidden = true; };
 $("btn-mods-folder").onclick = () =>
   window.api.openMods({ version: modsVersion(), loader: "pack", preinstalled: modsTab === "pre" });
 window.addEventListener("focus", () => { if (!$("mods").hidden) loadMods(); });
 $("btn-settings").onclick = () => { $("settings").hidden = false; };
+
+// ---------- Aktualizacje launchera ----------
+window.api.on("update:available", version => {
+  $("update-bar").hidden = false;
+  $("update-text").textContent = `Pobieranie aktualizacji ${version}…`;
+});
+window.api.on("update:progress", percent => {
+  $("update-text").textContent = `Pobieranie aktualizacji… ${percent}%`;
+});
+window.api.on("update:ready", version => {
+  $("update-bar").hidden = false;
+  $("update-text").textContent = `Nowa wersja ${version} jest gotowa`;
+  $("btn-update").hidden = false;
+});
+$("btn-update").onclick = () => window.api.installUpdate();
 $("btn-close-settings").onclick = () => { $("settings").hidden = true; };
 
 $("btn-ms").onclick = async () => {

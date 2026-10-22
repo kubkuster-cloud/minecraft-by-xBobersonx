@@ -7,6 +7,9 @@ Launcher do Minecrafta w stylu starego „Minecraft by Zyczu”, z wbudowaną pa
 - **Paczka xBobersonx Mods** — ponad 70 modów (Sodium, Iris, Lithium, Flashback, Simple Voice Chat, Zoomify, Silly's Auto Totem i wiele innych), instalowanych automatycznie dla każdej wersji Minecrafta obsługiwanej przez Fabric
 - Mody pobierane z [Modrinth](https://modrinth.com) zawsze w wersji pasującej do wybranej wersji gry, razem z wymaganymi bibliotekami
 - **Własne mody** — okno z zakładkami „Własne mody” i „Preinstalled”, w którym każdy mod można wyłączyć jednym kliknięciem (bez usuwania — plik dostaje końcówkę `.disabled`); mody z paczki leżą osobno w `mods/preinstalled`, a wyłączone zostają wyłączone także po aktualizacji paczki
+- **Szukaj modów** — zakładka z wyszukiwarką Modrinth: mody pasujące do wybranej wersji gry instalujesz jednym kliknięciem, razem z wymaganymi bibliotekami
+- **Automatyczne aktualizacje** — zainstalowany launcher sam pobiera nowe wersje z GitHub Releases
+- **Szybkie pobieranie** — mody sprawdzane i pobierane równolegle; na czas gry launcher chowa się do zasobnika
 - **Konto Microsoft** (z zapamiętywaniem logowania) albo **non-premium** (sam nick)
 - **Automatyczna Java** — launcher sam pobiera z serwerów Mojang właściwą Javę dla danej wersji gry (Java 21 dla nowych, Java 8 dla starych), nie trzeba jej instalować
 - **Zoptymalizowane ustawienia JVM** (G1GC) — mniej przycięć przy dużej liczbie modów
@@ -17,8 +20,8 @@ Launcher do Minecrafta w stylu starego „Minecraft by Zyczu”, z wbudowaną pa
 
 Gotowe pliki `.exe` znajdziesz w zakładce **Releases**:
 
-- `Minecraft by xBobersonx Setup 1.0.0.exe` — instalator (skrót na pulpicie)
-- `MinecraftByXBobersonx-Portable.exe` — wersja bez instalacji
+- `MinecraftByXBobersonx-Setup-<wersja>.exe` — instalator (skrót na pulpicie, automatyczne aktualizacje)
+- `MinecraftByXBobersonx-Portable.exe` — wersja bez instalacji (bez automatycznych aktualizacji)
 
 > Pliki nie mają podpisu cyfrowego, więc Windows SmartScreen może wyświetlić ostrzeżenie — kliknij **Więcej informacji → Uruchom mimo to**.
 
@@ -31,6 +34,13 @@ npm install
 npm start        # uruchamia launcher
 npm run dist     # buduje pliki .exe do folderu dist/
 ```
+
+## Wydawanie nowej wersji
+
+1. Zmień `version` w `package.json` (np. `1.1.0` → `1.2.0`) i zbuduj: `npm run dist`
+2. Na GitHubie: **Releases → Draft a new release**, tag `v<wersja>`
+3. Dodaj z folderu `dist/` pliki: `MinecraftByXBobersonx-Setup-<wersja>.exe`, `MinecraftByXBobersonx-Setup-<wersja>.exe.blockmap`, `latest.yml` (oraz opcjonalnie wersję portable)
+4. **Publish release** — zainstalowane launchery pobiorą aktualizację przy następnym uruchomieniu
 
 ## Zmiana listy modów
 

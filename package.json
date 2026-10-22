@@ -1,16 +1,17 @@
 {
   "name": "minecraft-by-xbobersonx",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Minecraft launcher by xBobersonx",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win"
+    "dist": "electron-builder --win --publish never"
   },
   "author": "xBobersonx",
   "license": "MIT",
   "dependencies": {
     "adm-zip": "^0.6.1",
+    "electron-updater": "^6.8.9",
     "minecraft-launcher-core": "^3.18.2",
     "msmc": "^5.0.5"
   },
@@ -46,7 +47,13 @@
       "icon": "assets/icon.png",
       "signExecutable": false
     },
+    "publish": {
+      "provider": "github",
+      "owner": "kubkuster-cloud",
+      "repo": "minecraft-by-xBobersonx"
+    },
     "nsis": {
+      "artifactName": "MinecraftByXBobersonx-Setup-${version}.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
