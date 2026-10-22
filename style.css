@@ -286,7 +286,7 @@ button.primary:not(:disabled):hover {
 }
 
 /* ---------- Okno modów ---------- */
-.mods-dialog { width: 620px; }
+.mods-dialog { width: 760px; }
 
 .mods-toolbar {
   display: flex;
@@ -294,7 +294,8 @@ button.primary:not(:disabled):hover {
   justify-content: space-between;
   gap: 10px;
 }
-.mods-toolbar input { flex: 0 0 180px; margin-bottom: 4px; }
+.mods-toolbar input { flex: 0 0 160px; margin-bottom: 4px; }
+.tab { padding: 0 10px; }
 
 .tabs { display: flex; gap: 2px; }
 .tab {
@@ -375,6 +376,28 @@ button.primary:not(:disabled):hover {
 }
 .result-meta { color: #999; font-size: 10px; margin-top: 2px; }
 #mods-list li.result button { flex-shrink: 0; height: 26px; padding: 0 12px; }
+
+/* shadery i tekstury: nagłówki sekcji i zainstalowane elementy */
+#mods-list li.section {
+  cursor: default;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #4a5a6b;
+  background: linear-gradient(#eef2f6, #e2e8ee);
+  border-bottom: 1px solid #cdd5de;
+}
+#mods-list li.section:hover { background: linear-gradient(#eef2f6, #e2e8ee); }
+#mods-list input[type=radio] {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: #4caf2a;
+  cursor: pointer;
+}
+#mods-list li.on .mod-title { font-weight: 600; color: #2f7d1f; }
+#mods-list li button.small { height: 22px; padding: 0 8px; font-size: 11px; }
 
 /* pasek aktualizacji launchera */
 .update-bar {

@@ -7,6 +7,7 @@ const { Auth } = require("msmc");
 const { autoUpdater } = require("electron-updater");
 const { installPack, packName, listMods, setModEnabled, searchMods, installOwnMod } = require("./modpack");
 const { getJava, JVM_FLAGS } = require("./java");
+const content = require("./content");
 
 const ICON = path.join(__dirname, "assets", "icon.png");
 
@@ -157,9 +158,21 @@ ipcMain.handle("mods:search", (_e, { version, query }) => searchMods(packDir(ver
 ipcMain.handle("mods:install", (_e, { version, id }) =>
   installOwnMod(packDir(version), version, id, msg => win.webContents.send("game:log", msg)));
 
-ipcMain.handle("folder:mods", (_e, { version, loader, preinstalled } = {}) => {
+// Shadery i paczki tekstur (type: "shader" | "resourcepack")
+ipcMain.handle("content:list", (_e, { version, type }) => content.listContent(packDir(version), type));
+ipcMain.handle("content:search", (_e, { version, type, query }) =>
+  content.searchContent(packDir(version), version, type, query));
+ipcMain.handle("content:install", (_e, { version, type, id }) =>
+  content.installContent(packDir(version), version, type, id));
+ipcMain.handle("content:toggle", (_e, { version, type, file, enabled }) =>
+  content.setContentEnabled(packDir(version), type, file, enabled));
+ipcMain.handle("content:delete", (_e, { version, type, file }) =>
+  content.deleteContent(packDir(version), type, file));
+
+ipcMain.handle("folder:mods", (_e, { version, loader, preinstalled, content: type } = {}) => {
   const base = loader === "pack" ? packDir(version) : GAME_DIR;
-  const dir = path.join(base, "mods", preinstalled ? "preinstalled" : "");
+  const folders = { shader: "shaderpacks", resourcepack: "resourcepacks" };
+  const dir = type ? path.join(base, folders[type]) : path.join(base, "mods", preinstalled ? "preinstalled" : "");
   fs.mkdirSync(dir, { recursive: true });
   return shell.openPath(dir);
 });
@@ -235,8 +248,11 @@ ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader }) =
     // Fabric nie czyta podfolderów mods/, więc wskazujemy mu preinstalled/ wprost
     jvmArgs.push(`-Dfabric.addMods=${preinstalled}`);
 
+    // domyślne ustawienia tylko dla wersji, w której gra jeszcze ich nie zapisała
+    // (options.txt mógł powstać wcześniej z samą listą paczek tekstur)
     const options = path.join(packDir(version), "options.txt");
-    if (!fs.existsSync(options)) fs.writeFileSync(options, DEFAULT_OPTIONS);
+    const current = fs.existsSync(options) ? fs.readFileSync(options, "utf8") : "";
+    if (!current.includes("renderDistance:")) fs.writeFileSync(options, `${DEFAULT_OPTIONS}\n${current}`);
   }
 
   launcher.on("progress", p => send("game:progress", p));

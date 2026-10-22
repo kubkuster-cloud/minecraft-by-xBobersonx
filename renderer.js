@@ -97,6 +97,7 @@ async function loadMods() {
 
 function renderMods() {
   if (modsTab === "search") return renderSearch();
+  if (isContentTab(modsTab)) return renderContent();
   const query = $("mods-search").value.trim().toLowerCase();
   const list = $("mods-list");
   const mods = modsData[modsTab].filter(m => !query || m.title.toLowerCase().includes(query) || m.file.toLowerCase().includes(query));
@@ -169,13 +170,20 @@ function cleanError(err) {
   return String(err.message || err).replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
 }
 
+const isContentTab = tab => tab === "shader" || tab === "resourcepack";
+let contentInstalled = [];
+
 async function doSearch() {
   const seq = ++searchSeq;
+  const tab = modsTab;
   searchResults = null;
   searchError = "";
-  renderSearch();
+  renderMods();
   try {
-    const results = await window.api.searchMods({ version: modsVersion(), query: $("mods-search").value.trim() });
+    const query = $("mods-search").value.trim();
+    const results = isContentTab(tab)
+      ? await window.api.searchContent({ version: modsVersion(), type: tab, query })
+      : await window.api.searchMods({ version: modsVersion(), query });
     if (seq !== searchSeq) return;
     searchResults = results;
   } catch (err) {
@@ -183,7 +191,7 @@ async function doSearch() {
     searchResults = [];
     searchError = "Nie udało się połączyć z Modrinth — sprawdź internet";
   }
-  renderSearch();
+  renderMods();
 }
 
 function renderSearch() {
@@ -196,8 +204,117 @@ function renderSearch() {
     list.appendChild(li);
     return;
   }
+  for (const mod of searchResults) list.appendChild(resultItem(mod, installModResult));
+}
 
-  for (const mod of searchResults) {
+async function installModResult(mod) {
+  const files = await window.api.installMod({ version: modsVersion(), id: mod.id });
+  await loadMods();
+  return files.length > 1
+    ? `Zainstalowano ${mod.title} + ${files.length - 1} wymaganych bibliotek`
+    : `Zainstalowano ${mod.title}`;
+}
+
+// ---------- Zakładki „Shadery” i „Tekstury” ----------
+
+async function loadContent() {
+  if (!isContentTab(modsTab)) return;
+  contentInstalled = await window.api.listContent({ version: modsVersion(), type: modsTab });
+  renderMods();
+}
+
+function section(text) {
+  const li = document.createElement("li");
+  li.className = "section";
+  li.textContent = text;
+  return li;
+}
+
+function contentRow(item, type) {
+  const li = document.createElement("li");
+  li.classList.toggle("on", item.enabled);
+  const input = document.createElement("input");
+  input.type = type === "shader" ? "radio" : "checkbox";
+  input.name = "shader";
+  input.checked = item.enabled;
+  const title = document.createElement("span");
+  title.className = "mod-title";
+  title.textContent = item.title;
+  li.append(input, title);
+
+  const set = async enabled => {
+    try {
+      await window.api.toggleContent({ version: modsVersion(), type, file: item.file, enabled });
+      $("mods-hint").textContent = "";
+    } catch (err) {
+      $("mods-hint").textContent = cleanError(err);
+    }
+    await loadContent();
+  };
+  // shader: kliknięcie wybiera go (jak przełącznik); paczka tekstur: włącza/wyłącza
+  const click = () => set(type === "shader" ? true : !item.enabled);
+  li.onclick = e => { if (e.target !== input && e.target.tagName !== "BUTTON") click(); };
+  input.onchange = click;
+
+  if (item.file) {
+    const del = document.createElement("button");
+    del.className = "small";
+    del.textContent = "Usuń";
+    del.onclick = async () => {
+      await window.api.deleteContent({ version: modsVersion(), type, file: item.file });
+      await loadContent();
+      if (searchResults) doSearch();
+    };
+    li.appendChild(del);
+  }
+  return li;
+}
+
+function renderContent() {
+  const type = modsTab;
+  const list = $("mods-list");
+  list.innerHTML = "";
+
+  list.appendChild(section(`Zainstalowane (${contentInstalled.length})`));
+  if (type === "shader") {
+    const none = contentRow({ title: "Bez shaderów", enabled: !contentInstalled.some(i => i.enabled) }, type);
+    none.onclick = async () => {
+      await window.api.toggleContent({ version: modsVersion(), type, file: null, enabled: false });
+      await loadContent();
+    };
+    list.appendChild(none);
+  } else if (contentInstalled.length === 0) {
+    const li = document.createElement("li");
+    li.className = "section";
+    li.style.fontWeight = "normal";
+    li.textContent = "Nic jeszcze nie zainstalowano — wybierz coś poniżej";
+    list.appendChild(li);
+  }
+  for (const item of contentInstalled) list.appendChild(contentRow(item, type));
+
+  list.appendChild(section(type === "shader" ? "Shadery do pobrania (Modrinth, działają z Iris)" : "Paczki tekstur do pobrania (Modrinth)"));
+  if (!searchResults || searchResults.length === 0) {
+    const li = document.createElement("li");
+    li.className = "section";
+    li.style.fontWeight = "normal";
+    li.textContent = !searchResults ? "Szukanie…" : searchError || "Nic nie znaleziono";
+    list.appendChild(li);
+    return;
+  }
+  for (const item of searchResults) {
+    list.appendChild(resultItem(item, async () => {
+      await window.api.installContent({ version: modsVersion(), type, id: item.id });
+      await loadContent();
+      return type === "shader"
+        ? `Zainstalowano i włączono shader ${item.title}`
+        : `Zainstalowano i włączono paczkę tekstur ${item.title}`;
+    }));
+  }
+}
+
+// Wiersz wyniku wyszukiwania z przyciskiem „Zainstaluj”; install() zwraca tekst podpowiedzi
+function resultItem(mod, install) {
+  {
     const li = document.createElement("li");
     li.className = "result";
 
@@ -230,14 +347,11 @@ function renderSearch() {
       button.disabled = true;
       button.textContent = "Instalowanie…";
       try {
-        const files = await window.api.installMod({ version: modsVersion(), id: mod.id });
+        const hint = await install(mod);
         mod.installed = true;
         button.textContent = "Zainstalowany";
         button.classList.remove("primary");
-        $("mods-hint").textContent = files.length > 1
-          ? `Zainstalowano ${mod.title} + ${files.length - 1} wymaganych bibliotek`
-          : `Zainstalowano ${mod.title}`;
-        await loadMods();
+        $("mods-hint").textContent = hint;
       } catch (err) {
         button.disabled = false;
         button.textContent = "Zainstaluj";
@@ -246,7 +360,7 @@ function renderSearch() {
     };
 
     li.append(icon, body, button);
-    list.appendChild(li);
+    return li;
   }
 }
 
@@ -255,9 +369,14 @@ function setModsTab(tab) {
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === tab));
   $("mods-hint").textContent = "";
   $("mods-search").value = "";
-  $("mods-search").placeholder = tab === "search" ? "Szukaj na Modrinth…" : "Szukaj…";
+  $("mods-search").placeholder = tab === "search" || isContentTab(tab) ? "Szukaj na Modrinth…" : "Szukaj…";
   $("btn-mods-folder").hidden = tab === "search";
-  if (tab === "search") doSearch();
+  $("mods-list").scrollTop = 0;
+  if (isContentTab(tab)) {
+    contentInstalled = [];
+    loadContent();
+  }
+  if (tab === "search" || isContentTab(tab)) doSearch();
   else renderMods();
 }
 
@@ -272,14 +391,18 @@ $("btn-mods").onclick = async () => {
 };
 document.querySelectorAll(".tab").forEach(t => { t.onclick = () => setModsTab(t.dataset.tab); });
 $("mods-search").oninput = () => {
-  if (modsTab !== "search") return renderMods();
+  if (modsTab !== "search" && !isContentTab(modsTab)) return renderMods();
   clearTimeout(searchTimer);
   searchTimer = setTimeout(doSearch, 400);
 };
 $("btn-close-mods").onclick = () => { $("mods").hidden = true; };
 $("btn-mods-folder").onclick = () =>
-  window.api.openMods({ version: modsVersion(), loader: "pack", preinstalled: modsTab === "pre" });
-window.addEventListener("focus", () => { if (!$("mods").hidden) loadMods(); });
+  window.api.openMods({ version: modsVersion(), loader: "pack", preinstalled: modsTab === "pre", content: isContentTab(modsTab) ? modsTab : null });
+window.addEventListener("focus", () => {
+  if ($("mods").hidden) return;
+  loadMods();
+  loadContent();
+});
 $("btn-settings").onclick = () => { $("settings").hidden = false; };
 
 // ---------- Aktualizacje launchera ----------

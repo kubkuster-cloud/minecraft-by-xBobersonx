@@ -8,6 +8,7 @@ Launcher do Minecrafta w stylu starego „Minecraft by Zyczu”, z wbudowaną pa
 - Mody pobierane z [Modrinth](https://modrinth.com) zawsze w wersji pasującej do wybranej wersji gry, razem z wymaganymi bibliotekami
 - **Własne mody** — okno z zakładkami „Własne mody” i „Preinstalled”, w którym każdy mod można wyłączyć jednym kliknięciem (bez usuwania — plik dostaje końcówkę `.disabled`); mody z paczki leżą osobno w `mods/preinstalled`, a wyłączone zostają wyłączone także po aktualizacji paczki
 - **Szukaj modów** — zakładka z wyszukiwarką Modrinth: mody pasujące do wybranej wersji gry instalujesz jednym kliknięciem, razem z wymaganymi bibliotekami
+- **Shadery i paczki tekstur** — zakładki z wyszukiwarką Modrinth (shadery działające z Iris); zainstalowany shader lub paczka włącza się od razu, a w oknie wybierasz aktywny shader i włączasz/wyłączasz paczki tekstur
 - **Automatyczne aktualizacje** — zainstalowany launcher sam pobiera nowe wersje z GitHub Releases
 - **Szybkie pobieranie** — mody sprawdzane i pobierane równolegle; na czas gry launcher chowa się do zasobnika
 - **Konto Microsoft** (z zapamiętywaniem logowania) albo **non-premium** (sam nick)
