@@ -152,8 +152,27 @@ async function installPack(instanceDir, gameVersion, { log, progress }) {
   const oldListFile = path.join(modsDir, ".xbobersonx-pack.json");
   if (fs.existsSync(oldListFile)) fs.renameSync(oldListFile, listFile);
 
+  // Paczka sprawdzana niedawno (i lista modów się nie zmieniła) — nie pytamy Modrinth znowu
+  const checkFile = path.join(instanceDir, ".xbobersonx-pack-check.json");
+  const packHash = crypto.createHash("sha1").update(JSON.stringify(PACK)).digest("hex");
+  const complete = packComplete(instanceDir, modsDir);
+  let check = {};
+  try { check = JSON.parse(fs.readFileSync(checkFile, "utf8")); } catch {}
+  if (complete && check.packHash === packHash && Date.now() - check.time < RECHECK_MS) {
+    log("[paczka] Mody sprawdzane niedawno — pomijam sprawdzanie");
+    return modsDir;
+  }
+
   log(`[paczka] Sprawdzanie modów dla ${gameVersion}...`);
-  const files = await resolve([...PACK.libraries, ...PACK.mods], gameVersion, log);
+  let files;
+  try {
+    files = await resolve([...PACK.libraries, ...PACK.mods], gameVersion, log);
+  } catch (err) {
+    // brak internetu albo Modrinth nie działa — gramy na tym, co już jest pobrane
+    if (!complete) throw new Error("Brak połączenia z Modrinth — tę wersję trzeba raz uruchomić z internetem");
+    log(`[paczka] Brak połączenia z Modrinth (${err.message}) — używam pobranych modów`);
+    return modsDir;
+  }
 
   // wyłączone mody wracają na czas aktualizacji, potem są wyłączane ponownie
   for (const name of fs.readdirSync(modsDir)) {
@@ -185,8 +204,18 @@ async function installPack(instanceDir, gameVersion, { log, progress }) {
   for (const f of list) {
     if (disabled.has(f.project)) renameMod(modsDir, f.name, false);
   }
+  fs.writeFileSync(checkFile, JSON.stringify({ time: Date.now(), packHash }));
   log(`[paczka] Gotowe: ${files.length} modów${disabled.size ? `, wyłączone: ${disabled.size}` : ""}`);
   return modsDir;
+}
+
+const RECHECK_MS = 6 * 60 * 60 * 1000; // paczkę sprawdzamy w Modrinth najwyżej co 6 godzin
+
+// Czy paczka jest kompletnie pobrana (każdy plik z listy istnieje, włączony albo wyłączony)
+function packComplete(instanceDir, modsDir) {
+  const list = readPackList(instanceDir);
+  return list.length > 0 && list.every(f =>
+    fs.existsSync(path.join(modsDir, f.name)) || fs.existsSync(path.join(modsDir, f.name + DISABLED)));
 }
 
 // ---------- Zarządzanie modami (okno „Własne mody”) ----------

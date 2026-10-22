@@ -37,12 +37,19 @@ async function getJson(url) {
   return res.json();
 }
 
-// Którą Javę wymaga dana wersja gry (pole javaVersion w jej pliku wersji)
-async function javaComponentFor(gameVersion, manifestUrl) {
-  const manifest = await getJson(manifestUrl);
-  const entry = manifest.versions.find(v => v.id === gameVersion);
-  if (!entry) throw new Error(`Nieznana wersja ${gameVersion}`);
-  const json = await getJson(entry.url);
+// Którą Javę wymaga dana wersja gry (pole javaVersion w jej pliku wersji).
+// Bez internetu czyta plik wersji zapisany wcześniej na dysku (localJson).
+async function javaComponentFor(gameVersion, manifestUrl, localJson) {
+  let json;
+  try {
+    const manifest = await getJson(manifestUrl);
+    const entry = manifest.versions.find(v => v.id === gameVersion);
+    if (!entry) throw new Error(`Nieznana wersja ${gameVersion}`);
+    json = await getJson(entry.url);
+  } catch (err) {
+    if (!localJson || !fs.existsSync(localJson)) throw err;
+    json = JSON.parse(fs.readFileSync(localJson, "utf8"));
+  }
   return json.javaVersion ? json.javaVersion.component : "jre-legacy";
 }
 
@@ -99,10 +106,10 @@ async function installRuntime(runtimeRoot, component, { log, progress }) {
 
 // Zwraca ścieżkę do Javy dla danej wersji gry. Gdy pobranie się nie uda,
 // używa wcześniej pobranej Javy albo tej z systemu.
-async function getJava(gameVersion, { runtimeRoot, manifestUrl, log, progress }) {
+async function getJava(gameVersion, { runtimeRoot, manifestUrl, localJson, log, progress }) {
   let component = null;
   try {
-    component = await javaComponentFor(gameVersion, manifestUrl);
+    component = await javaComponentFor(gameVersion, manifestUrl, localJson);
     return await installRuntime(runtimeRoot, component, { log, progress });
   } catch (err) {
     const cached = component && path.join(runtimeRoot, component, "bin", "javaw.exe");

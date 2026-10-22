@@ -24,11 +24,13 @@ function persist() {
 }
 
 // Tylko wbudowana paczka modów, dla każdej wersji obsługiwanej przez Fabric
-function fillVersions(versions, fabricVersions, packName) {
+// onlyInstalled: bez internetu pokazujemy tylko wersje, które już są pobrane
+function fillVersions(versions, fabricVersions, packName, onlyInstalled) {
   const select = $("version");
   select.innerHTML = "";
   for (const v of versions) {
     if (v.type !== "release" || !fabricVersions.has(v.id)) continue;
+    if (onlyInstalled && !onlyInstalled.includes(v.id)) continue;
     const opt = document.createElement("option");
     opt.value = `${v.id}|pack`;
     opt.textContent = `Minecraft ${v.id} – ${packName}`;
@@ -76,9 +78,9 @@ function drawHead(skinUrl) {
   img.src = skinUrl;
 }
 
-function setAccount(name, skin) {
+function setAccount(name, skin, offline) {
   drawHead(name ? skin : null);
-  $("account").textContent = name ? `Microsoft: ${name}` : "Non-premium (nick)";
+  $("account").textContent = name ? `Microsoft: ${name}${offline ? " (offline)" : ""}` : "Non-premium (nick)";
   $("btn-ms").hidden = !!name;
   $("btn-logout").hidden = !name;
   $("nick").disabled = !!name;
@@ -97,16 +99,21 @@ async function init() {
 
   drawHead(null);
   window.api.restoreLogin().then(account => {
-    if (account) setAccount(account.name, account.skin);
+    if (account) setAccount(account.name, account.skin, account.offline);
   });
 
   try {
-    const [{ versions }, fabric, packName] = await Promise.all([
+    const [{ versions, offline, installed }, fabric, packName] = await Promise.all([
       window.api.listVersions(),
       window.api.fabricVersions().catch(() => []),
       window.api.packName(),
     ]);
-    fillVersions(versions, new Set(fabric), packName);
+    fillVersions(versions, new Set(fabric), packName, offline ? installed : null);
+    if (offline) {
+      setStatus(installed.length
+        ? "Brak internetu — tryb offline: grasz na pobranych wersjach"
+        : "Brak internetu — żadna wersja nie jest jeszcze pobrana");
+    }
   } catch (err) {
     $("version").innerHTML = "<option>Brak połączenia</option>";
     setStatus("Nie można pobrać listy wersji — sprawdź internet");

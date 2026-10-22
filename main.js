@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, safeStorage, Tray, Menu } = require("electron");
+const { app, BrowserWindow, ipcMain, shell, safeStorage, Tray, Menu, net } = require("electron");
 const path = require("path");
 const os = require("os");
 const fs = require("fs");
@@ -113,33 +113,76 @@ ipcMain.handle("settings:load", () => loadSettings());
 ipcMain.handle("settings:save", (_e, s) => saveSettings(s));
 ipcMain.handle("system:ram", () => Math.floor(os.totalmem() / 1024 ** 3));
 
+// ---------- Tryb offline ----------
+
+// Pobiera JSON i zapisuje kopię; bez internetu zwraca ostatnią zapisaną kopię
+async function cachedJson(url, name) {
+  const file = path.join(GAME_DIR, "cache", "launcher", `${name}.json`);
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`${res.status}`);
+    const data = await res.json();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(data));
+    return { data, offline: false };
+  } catch (err) {
+    if (!fs.existsSync(file)) throw err;
+    return { data: JSON.parse(fs.readFileSync(file, "utf8")), offline: true };
+  }
+}
+
+// Wersje, które były już uruchomione (mają pobraną paczkę) — tylko na nich da się grać bez internetu
+function installedVersions() {
+  const dir = path.join(GAME_DIR, "instances");
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir)
+    .filter(n => n.startsWith("pack-") && fs.existsSync(path.join(dir, n, ".xbobersonx-pack.json")))
+    .map(n => n.slice("pack-".length));
+}
+
 ipcMain.handle("versions:list", async () => {
-  const res = await fetch(MANIFEST_URL);
-  const data = await res.json();
-  return { latest: data.latest, versions: data.versions.map(v => ({ id: v.id, type: v.type })) };
+  const { data, offline } = await cachedJson(MANIFEST_URL, "version_manifest");
+  return {
+    latest: data.latest,
+    versions: data.versions.map(v => ({ id: v.id, type: v.type })),
+    offline,
+    installed: installedVersions(),
+  };
 });
 
 // Pobiera profil Fabric dla danej wersji gry i zapisuje go w versions/,
-// zwraca jego id (np. "fabric-loader-0.16.10-1.21.1") do użycia jako version.custom
+// zwraca jego id (np. "fabric-loader-0.16.10-1.21.1") do użycia jako version.custom.
+// Bez internetu używa wcześniej zapisanego profilu.
 async function installFabric(gameVersion) {
-  const res = await fetch(`${FABRIC_META}/${gameVersion}`);
-  const loaders = await res.json();
-  if (!Array.isArray(loaders) || loaders.length === 0) {
-    throw new Error(`Fabric nie jest dostępny dla wersji ${gameVersion}`);
-  }
-  const loader = (loaders.find(l => l.loader.stable) || loaders[0]).loader.version;
+  try {
+    const res = await fetch(`${FABRIC_META}/${gameVersion}`);
+    const loaders = await res.json();
+    if (!Array.isArray(loaders) || loaders.length === 0) {
+      throw new Error(`Fabric nie jest dostępny dla wersji ${gameVersion}`);
+    }
+    const loader = (loaders.find(l => l.loader.stable) || loaders[0]).loader.version;
 
-  const profileRes = await fetch(`${FABRIC_META}/${gameVersion}/${loader}/profile/json`);
-  const profile = await profileRes.json();
-  const dir = path.join(GAME_DIR, "versions", profile.id);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, `${profile.id}.json`), JSON.stringify(profile, null, 2));
-  return profile.id;
+    const profileRes = await fetch(`${FABRIC_META}/${gameVersion}/${loader}/profile/json`);
+    const profile = await profileRes.json();
+    const dir = path.join(GAME_DIR, "versions", profile.id);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, `${profile.id}.json`), JSON.stringify(profile, null, 2));
+    return profile.id;
+  } catch (err) {
+    const versionsDir = path.join(GAME_DIR, "versions");
+    const saved = fs.existsSync(versionsDir)
+      ? fs.readdirSync(versionsDir)
+          .filter(n => n.startsWith("fabric-loader-") && n.endsWith(`-${gameVersion}`))
+          .filter(n => fs.existsSync(path.join(versionsDir, n, `${n}.json`)))
+          .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+      : [];
+    if (saved.length === 0) throw new Error(`Brak internetu — wersję ${gameVersion} trzeba raz uruchomić z internetem`);
+    return saved[saved.length - 1];
+  }
 }
 
 ipcMain.handle("fabric:versions", async () => {
-  const res = await fetch("https://meta.fabricmc.net/v2/versions/game");
-  const data = await res.json();
+  const { data } = await cachedJson("https://meta.fabricmc.net/v2/versions/game", "fabric_versions");
   return data.map(v => v.version);
 });
 
@@ -191,14 +234,21 @@ function readRefreshToken() {
   return safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(data) : data.toString();
 }
 
+// Nazwa, UUID i skin konta (bez tokenów) — żeby bez internetu grać na tym samym profilu
+const PROFILE_FILE = path.join(GAME_DIR, "account-profile.json");
+let offlineProfile = null;
+
 async function finishLogin(xbox) {
   const mc = await xbox.getMinecraft();
   if (!mc.profile) throw new Error("To konto Microsoft nie ma kupionego Minecrafta");
   msMinecraft = mc;
+  offlineProfile = null;
   saveRefreshToken(xbox);
   const skins = msMinecraft.profile.skins || [];
   const skin = (skins.find(s => s.state === "ACTIVE") || skins[0] || {}).url || null;
-  return { name: msMinecraft.profile.name, skin: skin && skin.replace(/^http:/, "https:") };
+  const profile = { id: mc.profile.id, name: mc.profile.name, skin: skin && skin.replace(/^http:/, "https:") };
+  fs.writeFileSync(PROFILE_FILE, JSON.stringify(profile));
+  return { name: profile.name, skin: profile.skin };
 }
 
 ipcMain.handle("auth:microsoft", async () => {
@@ -206,7 +256,8 @@ ipcMain.handle("auth:microsoft", async () => {
   return finishLogin(xbox);
 });
 
-// Przy starcie: zaloguj ponownie z zapisanego tokenu (bez okna logowania)
+// Przy starcie: zaloguj ponownie z zapisanego tokenu (bez okna logowania).
+// Bez internetu używa zapisanego profilu — single player działa na tym samym koncie.
 ipcMain.handle("auth:restore", async () => {
   if (!fs.existsSync(ACCOUNT_FILE)) return null;
   try {
@@ -214,14 +265,46 @@ ipcMain.handle("auth:restore", async () => {
     return await finishLogin(xbox);
   } catch (err) {
     console.error("Nie udało się przywrócić logowania:", err);
-    return null;
+    if (net.isOnline() || !fs.existsSync(PROFILE_FILE)) return null;
+    offlineProfile = JSON.parse(fs.readFileSync(PROFILE_FILE, "utf8"));
+    return { name: offlineProfile.name, skin: null, offline: true };
   }
 });
 
 ipcMain.handle("auth:logout", () => {
   msMinecraft = null;
+  offlineProfile = null;
   fs.rmSync(ACCOUNT_FILE, { force: true });
+  fs.rmSync(PROFILE_FILE, { force: true });
 });
+
+// Dane logowania dla gry: konto Microsoft (odświeżone, jeśli się da), zapisany profil bez internetu
+// albo konto non-premium z samym nickiem
+async function gameAuthorization(nick, log) {
+  if (msMinecraft) {
+    // token Minecrafta ważny jest ok. 24h — odśwież, jeśli wygasł
+    if (!msMinecraft.validate()) {
+      try {
+        msMinecraft = await msMinecraft.refresh(true);
+      } catch (err) {
+        log(`[konto] Nie można odświeżyć logowania (${err.message || err}) — gram offline na tym koncie`);
+      }
+    }
+    return msMinecraft.mclc();
+  }
+  if (offlineProfile) {
+    log("[konto] Brak internetu — gram offline na zapisanym koncie Microsoft");
+    return {
+      access_token: "0",
+      client_token: "0",
+      uuid: offlineProfile.id,
+      name: offlineProfile.name,
+      user_properties: "{}",
+      meta: { type: "msa", demo: false },
+    };
+  }
+  return Authenticator.getAuth(nick);
+}
 
 // Analiza crasha + powiązanie podejrzanych modów z plikami, żeby można je było wyłączyć
 function describeCrash(instanceDir, version, log, code, reportFile) {
@@ -256,6 +339,7 @@ ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader }) =
   const javaPath = await getJava(version, {
     runtimeRoot: path.join(GAME_DIR, "runtime"),
     manifestUrl: MANIFEST_URL,
+    localJson: path.join(GAME_DIR, "versions", version, `${version}.json`),
     log: msg => send("game:log", msg),
     progress: p => send("game:progress", p),
   });
@@ -305,14 +389,7 @@ ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader }) =
     }
   });
 
-  let authorization;
-  if (msMinecraft) {
-    // token Minecrafta ważny jest ok. 24h — odśwież, jeśli wygasł
-    if (!msMinecraft.validate()) msMinecraft = await msMinecraft.refresh(true);
-    authorization = msMinecraft.mclc();
-  } else {
-    authorization = Authenticator.getAuth(nick);
-  }
+  const authorization = await gameAuthorization(nick, msg => send("game:log", msg));
 
   const proc = await launcher.launch({
     root: GAME_DIR,
