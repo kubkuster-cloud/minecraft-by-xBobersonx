@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, safeStorage, Tray, Menu, net } = require("electron");
+const { app, BrowserWindow, ipcMain, shell, safeStorage, Tray, Menu, net, dialog } = require("electron");
 const path = require("path");
 const os = require("os");
 const fs = require("fs");
@@ -9,6 +9,7 @@ const { installPack, packName, listMods, setModEnabled, searchMods, installOwnMo
 const { getJava, JVM_FLAGS } = require("./java");
 const content = require("./content");
 const { analyze, findCrashReport } = require("./crash");
+const disk = require("./disk");
 
 const ICON = path.join(__dirname, "assets", "icon.png");
 
@@ -33,6 +34,7 @@ const FABRIC_META = "https://meta.fabricmc.net/v2/versions/loader";
 
 let win;
 let tray = null;
+let gameRunning = false;
 let msMinecraft = null; // zalogowane konto Microsoft (obiekt Minecraft z msmc)
 
 // Na czas gry launcher chowa się do zasobnika (obok zegara) i wraca po zamknięciu gry
@@ -324,6 +326,36 @@ function describeCrash(instanceDir, version, log, code, reportFile) {
 
 ipcMain.handle("crash:open-report", (_e, file) => shell.openPath(file));
 
+// ---------- Miejsce na dysku ----------
+const UPDATER_CACHE = path.join(app.getPath("home"), "AppData", "Local", "minecraft-by-xbobersonx-updater");
+
+function ensureGameClosed() {
+  if (gameRunning) throw new Error("Zamknij grę, zanim zaczniesz sprzątać");
+}
+
+ipcMain.handle("disk:scan", () => disk.scan(GAME_DIR, UPDATER_CACHE));
+ipcMain.handle("disk:clean", () => {
+  ensureGameClosed();
+  return disk.cleanJunk(GAME_DIR, UPDATER_CACHE);
+});
+ipcMain.handle("disk:delete-version", async (_e, { version, worlds }) => {
+  ensureGameClosed();
+  const { response } = await dialog.showMessageBox(win, {
+    type: "warning",
+    title: "Usuń wersję",
+    message: `Usunąć Minecraft ${version}?`,
+    detail: worlds > 0
+      ? `Razem z wersją znikną ${worlds} ${worlds === 1 ? "świat" : "światy"}, mody, shadery i ustawienia tej wersji. Tego nie da się cofnąć.`
+      : "Znikną mody, shadery i ustawienia tej wersji. Przy następnym uruchomieniu wszystko pobierze się od nowa.",
+    buttons: ["Usuń", "Anuluj"],
+    defaultId: 1,
+    cancelId: 1,
+  });
+  if (response !== 0) return null;
+  return disk.deleteVersion(GAME_DIR, version);
+});
+ipcMain.handle("disk:open", () => shell.openPath(GAME_DIR));
+
 ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader }) => {
   const launcher = new Client();
   const send = (ch, data) => win && !win.isDestroyed() && win.webContents.send(ch, data);
@@ -376,10 +408,12 @@ ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader }) =
   });
   launcher.on("debug", d => send("game:log", d.toString()));
   launcher.on("arguments", () => {
+    gameRunning = true;
     send("game:started");
     hideToTray();
   });
   launcher.on("close", code => {
+    gameRunning = false;
     showFromTray();
     send("game:closed", code);
     const instanceDir = loader === "pack" ? packDir(version) : GAME_DIR;

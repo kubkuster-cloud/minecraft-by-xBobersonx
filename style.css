@@ -459,6 +459,43 @@ button.primary:not(:disabled):hover {
   user-select: text;
 }
 
+/* okno „Miejsce na dysku” */
+.disk-dialog { width: 600px; }
+.disk-total { font-size: 15px; margin-bottom: 8px; text-shadow: 0 1px 2px #000; }
+.disk-total b { color: #9fe07a; }
+#disk-list {
+  list-style: none;
+  padding: 0;
+  max-height: 290px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #8e9aa8;
+  border-radius: 3px;
+  color: #000;
+}
+#disk-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid #eef0f3;
+}
+#disk-list li.section {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #4a5a6b;
+  background: linear-gradient(#eef2f6, #e2e8ee);
+  border-bottom: 1px solid #cdd5de;
+}
+.disk-name { flex: 1; min-width: 0; }
+.disk-name small { display: block; color: #888; font-size: 10px; }
+.disk-size { font-weight: 600; white-space: nowrap; }
+.disk-bar { width: 80px; height: 6px; background: #e8ecf1; border-radius: 3px; overflow: hidden; flex-shrink: 0; }
+.disk-bar div { height: 100%; background: linear-gradient(#7fd04f, #4caf2a); }
+#disk-list li button { height: 22px; padding: 0 10px; font-size: 11px; }
+#disk-hint { margin-top: 6px; min-height: 15px; font-size: 11px; color: #f0f0f0; text-shadow: 0 1px 2px #000; }
+
 /* pasek aktualizacji launchera */
 .update-bar {
   position: fixed;

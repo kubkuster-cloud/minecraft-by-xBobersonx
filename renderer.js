@@ -586,4 +586,96 @@ $("btn-crash-log").onclick = () => {
   $("settings").hidden = false;
 };
 
+// ---------- Okno „Miejsce na dysku” ----------
+
+function niceSize(bytes) {
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+  if (bytes >= 1024 ** 2) return `${Math.round(bytes / 1024 ** 2)} MB`;
+  return bytes === 0 ? "0 KB" : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function diskRow(name, detail, size, max, button) {
+  const li = document.createElement("li");
+  const label = document.createElement("span");
+  label.className = "disk-name";
+  label.textContent = name;
+  if (detail) {
+    const small = document.createElement("small");
+    small.textContent = detail;
+    label.appendChild(small);
+  }
+  const bar = document.createElement("div");
+  bar.className = "disk-bar";
+  const fill = document.createElement("div");
+  fill.style.width = `${Math.max(2, Math.round((size / max) * 100))}%`;
+  bar.appendChild(fill);
+  const value = document.createElement("span");
+  value.className = "disk-size";
+  value.textContent = niceSize(size);
+  li.append(label, bar, value);
+  if (button) li.appendChild(button);
+  return li;
+}
+
+function diskSection(text) {
+  const li = document.createElement("li");
+  li.className = "section";
+  li.textContent = text;
+  return li;
+}
+
+async function loadDisk() {
+  $("disk-total").textContent = "Liczenie…";
+  $("disk-list").innerHTML = "";
+  const data = await window.api.diskScan();
+  $("disk-total").innerHTML = `Gra zajmuje razem: <b>${niceSize(data.total)}</b>`;
+  const max = Math.max(...data.versions.map(v => v.size), ...data.shared.map(s => s.size), 1);
+  const list = $("disk-list");
+
+  list.appendChild(diskSection(`Wersje gry (${data.versions.length})`));
+  for (const v of data.versions) {
+    const p = v.parts;
+    const detail = `światy ${niceSize(p.saves)} (${v.worlds}) · mody ${niceSize(p.mods)} · shadery i tekstury ${niceSize(p.content)} · reszta ${niceSize(p.other)}`;
+    const del = document.createElement("button");
+    del.textContent = "Usuń";
+    del.onclick = async () => {
+      try {
+        const freed = await window.api.diskDeleteVersion({ version: v.version, worlds: v.worlds });
+        if (freed === null) return;
+        $("disk-hint").textContent = `Usunięto Minecraft ${v.version} — zwolniono ${niceSize(freed)}`;
+        loadDisk();
+      } catch (err) {
+        $("disk-hint").textContent = cleanError(err);
+      }
+    };
+    list.appendChild(diskRow(`Minecraft ${v.version}`, detail, v.size, max, del));
+  }
+
+  list.appendChild(diskSection("Pliki wspólne"));
+  for (const s of data.shared) list.appendChild(diskRow(s.label, "", s.size, max));
+
+  list.appendChild(diskSection(`Śmieci do wyczyszczenia: ${niceSize(data.junkSize)}`));
+  if (data.junk.length === 0) list.appendChild(diskRow("Nic do sprzątania 🎉", "", 0, max));
+  for (const j of data.junk) list.appendChild(diskRow(j.label, "", j.size, max));
+  $("btn-disk-clean").disabled = data.junkSize === 0;
+}
+
+$("btn-disk").onclick = () => {
+  $("settings").hidden = true;
+  $("disk-hint").textContent = "";
+  $("disk").hidden = false;
+  loadDisk();
+};
+$("btn-close-disk").onclick = () => { $("disk").hidden = true; };
+$("btn-disk-open").onclick = () => window.api.diskOpen();
+$("btn-disk-clean").onclick = async () => {
+  try {
+    const freed = await window.api.diskClean();
+    $("disk-hint").textContent = `Wyczyszczono — zwolniono ${niceSize(freed)}`;
+    loadDisk();
+  } catch (err) {
+    $("disk-hint").textContent = cleanError(err);
+  }
+};
+
 init();
