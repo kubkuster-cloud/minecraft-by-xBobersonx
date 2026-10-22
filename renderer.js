@@ -111,27 +111,45 @@ $("btn-play").onclick = async () => {
   if (!loader) return;
 
   persist();
-  $("btn-play").disabled = true;
+  setPlaying(true);
   setStatus("Przygotowywanie…", 0);
   try {
     await window.api.launch({ nick, version, type: "release", ram: Number($("ram").value), loader });
   } catch (err) {
-    setStatus("Błąd uruchamiania — szczegóły w ⚙ Ustawienia");
+    setStatus("Błąd uruchamiania — szczegóły w ustawieniach (⚙)");
     log(String(err));
-    $("btn-play").disabled = false;
+    setPlaying(false);
   }
+};
+
+function setPlaying(on) {
+  $("btn-play").disabled = on;
+  $("play-label").textContent = on ? "Uruchamianie…" : "Uruchom grę";
+}
+
+const STAGES = {
+  mods: "Mody",
+  assets: "Zasoby gry",
+  "assets-copy": "Kopiowanie zasobów",
+  classes: "Biblioteki",
+  "classes-custom": "Biblioteki Fabric",
+  "classes-maven-custom": "Biblioteki Fabric",
+  natives: "Pliki systemowe",
 };
 
 window.api.on("game:progress", p => {
   const percent = p.total ? Math.round((p.task / p.total) * 100) : 0;
-  setStatus(`Pobieranie: ${p.type} (${p.task}/${p.total})`, percent);
+  setStatus(`${STAGES[p.type] || p.type}: ${p.task}/${p.total}`, percent);
 });
 window.api.on("game:log", log);
-window.api.on("game:started", () => setStatus("Gra uruchomiona!", 100));
+window.api.on("game:started", () => {
+  setStatus("Gra uruchomiona!", 100);
+  $("play-label").textContent = "Gra działa";
+});
 window.api.on("game:closed", code => {
   setStatus(code === 0 ? "" : `Gra zamknięta (kod ${code})`);
   document.querySelector(".progress").hidden = true;
-  $("btn-play").disabled = false;
+  setPlaying(false);
 });
 
 init();

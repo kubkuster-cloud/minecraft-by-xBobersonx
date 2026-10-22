@@ -107,12 +107,29 @@ async function fixExactDeps(files, modsDir, log) {
   }
 }
 
-// Instaluje paczkę do <instanceDir>/mods. Pliki dodane ręcznie przez gracza zostają,
-// a stare wersje modów z paczki są usuwane (lista w .xbobersonx-pack.json).
+// Starsze wersje launchera trzymały mody paczki luzem w mods/ — przenosimy je do preinstalled/
+function removeLegacyPack(instanceDir) {
+  const legacyList = path.join(instanceDir, "mods", ".xbobersonx-pack.json");
+  if (!fs.existsSync(legacyList)) return;
+  try {
+    for (const name of JSON.parse(fs.readFileSync(legacyList, "utf8"))) {
+      fs.rmSync(path.join(instanceDir, "mods", name), { force: true });
+    }
+  } catch {}
+  fs.rmSync(legacyList, { force: true });
+}
+
+// Instaluje paczkę do <instanceDir>/mods/preinstalled i zwraca ten folder
+// (gra dostaje go przez -Dfabric.addMods). W samym mods/ zostają tylko mody gracza.
+// Stare wersje modów z paczki są usuwane (lista w .xbobersonx-pack.json).
 async function installPack(instanceDir, gameVersion, { log, progress }) {
-  const modsDir = path.join(instanceDir, "mods");
-  const listFile = path.join(modsDir, ".xbobersonx-pack.json");
+  removeLegacyPack(instanceDir);
+  const modsDir = path.join(instanceDir, "mods", "preinstalled");
+  // lista poza preinstalled/, bo Fabric ostrzega o plikach innych niż .jar w tym folderze
+  const listFile = path.join(instanceDir, ".xbobersonx-pack.json");
   fs.mkdirSync(modsDir, { recursive: true });
+  const oldListFile = path.join(modsDir, ".xbobersonx-pack.json");
+  if (fs.existsSync(oldListFile)) fs.renameSync(oldListFile, listFile);
 
   log(`[paczka] Sprawdzanie modów dla ${gameVersion}...`);
   const files = await resolve(gameVersion, log);
@@ -135,6 +152,7 @@ async function installPack(instanceDir, gameVersion, { log, progress }) {
 
   fs.writeFileSync(listFile, JSON.stringify(files.map(f => f.name), null, 2));
   log(`[paczka] Gotowe: ${files.length} modów`);
+  return modsDir;
 }
 
 module.exports = { installPack, packName: PACK.name };

@@ -9,14 +9,20 @@
 <body>
   <canvas id="bg"></canvas>
   <img id="bg-img" alt="">
+  <div class="vignette"></div>
 
   <h1 class="logo">
     <canvas id="logo-mc"></canvas>
     <span class="by">by <span>xBobersonx</span></span>
   </h1>
 
-  <section class="panel">
-    <div class="panel-title">Minecraft Launcher by xBobersonx</div>
+  <section class="panel glass">
+    <div class="panel-title">
+      <span>Minecraft Launcher by xBobersonx</span>
+      <button id="btn-settings" class="title-btn" title="Ustawienia">
+        <svg viewBox="0 0 16 16"><path d="M9.4 1l.3 1.9c.5.2 1 .5 1.4.8l1.8-.7 1.4 2.4-1.5 1.2a5 5 0 0 1 0 1.7l1.5 1.2-1.4 2.4-1.8-.7c-.4.3-.9.6-1.4.8L9.4 15H6.6l-.3-1.9c-.5-.2-1-.5-1.4-.8l-1.8.7-1.4-2.4 1.5-1.2a5 5 0 0 1 0-1.7L1.7 6.5l1.4-2.4 1.8.7c.4-.3.9-.6 1.4-.8L6.6 1h2.8zM8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></svg>
+      </button>
+    </div>
 
     <div class="row">
       <label for="nick">Twój Nick:</label>
@@ -28,9 +34,14 @@
     </div>
 
     <div class="buttons">
-      <button id="btn-settings" class="icon" title="Ustawienia">⚙</button>
-      <button id="btn-mods">🔧 Własne mody</button>
-      <button id="btn-play">Uruchom grę</button>
+      <button id="btn-mods">
+        <svg viewBox="0 0 16 16"><path d="M14.7 4.1l-2.3 2.3-2-.5-.5-2 2.3-2.3A4 4 0 0 0 7 6.7L1.6 12a1.4 1.4 0 0 0 2 2l5.4-5.4a4 4 0 0 0 5.7-4.5z" fill="#6b7a8c"/></svg>
+        Własne mody
+      </button>
+      <button id="btn-play" class="primary">
+        <svg viewBox="0 0 16 16"><path d="M4 2.5v11l9-5.5z" fill="#2f7d1f"/></svg>
+        <span id="play-label">Uruchom grę</span>
+      </button>
     </div>
 
     <div class="progress" hidden><div id="bar"></div></div>
@@ -40,30 +51,27 @@
   <div class="app-version" id="app-version"></div>
 
   <div class="overlay" id="settings" hidden>
-    <div class="dialog">
-      <div class="panel-title">Ustawienia</div>
+    <div class="dialog glass">
+      <div class="panel-title">
+        <span>Ustawienia</span>
+        <button id="btn-close-settings" class="title-btn close" title="Zamknij">✕</button>
+      </div>
 
       <div class="row">
         <label for="ram">Pamięć RAM:</label>
         <input type="range" id="ram" min="1" max="16" value="4">
-        <span id="ram-val">4 GB</span>
+        <span id="ram-val" class="value">4 GB</span>
       </div>
 
       <div class="row">
         <label>Konto:</label>
-        <span id="account">Non-premium (nick)</span>
-      </div>
-      <div class="buttons">
+        <span id="account" class="value wide">Non-premium (nick)</span>
         <button id="btn-ms">Zaloguj przez Microsoft</button>
         <button id="btn-logout" hidden>Wyloguj</button>
       </div>
 
       <label class="log-label">Konsola:</label>
       <pre id="log"></pre>
-
-      <div class="buttons">
-        <button id="btn-close-settings">Zamknij</button>
-      </div>
     </div>
   </div>
 

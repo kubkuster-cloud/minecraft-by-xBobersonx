@@ -142,17 +142,22 @@ ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader }) =
   const launcher = new Client();
   const send = (ch, data) => win && !win.isDestroyed() && win.webContents.send(ch, data);
 
-  const gameVersion = { number: version, type };
+  // type trafia do --versionType; Minecraft pokazuje go na dole ekranu tytułowego
+  // („Minecraft 1.21.11/xBobersonx”) i w F3
+  const gameVersion = { number: version, type: "xBobersonx" };
   if (loader === "fabric" || loader === "pack") {
     send("game:log", "Instalowanie Fabric...");
     gameVersion.custom = await installFabric(version);
     send("game:log", `Fabric: ${gameVersion.custom}`);
   }
+  const jvmArgs = [];
   if (loader === "pack") {
-    await installPack(packDir(version), version, {
+    const preinstalled = await installPack(packDir(version), version, {
       log: msg => send("game:log", msg),
       progress: p => send("game:progress", p),
     });
+    // Fabric nie czyta podfolderów mods/, więc wskazujemy mu preinstalled/ wprost
+    jvmArgs.push(`-Dfabric.addMods=${preinstalled}`);
   }
 
   launcher.on("progress", p => send("game:progress", p));
@@ -177,6 +182,7 @@ ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader }) =
     version: gameVersion,
     memory: { max: `${ram}G`, min: "1G" },
     overrides: loader === "pack" ? { gameDirectory: packDir(version) } : {},
+    customArgs: jvmArgs,
   });
   if (!proc) throw new Error("Nie udało się uruchomić gry (sprawdź logi).");
   return true;
