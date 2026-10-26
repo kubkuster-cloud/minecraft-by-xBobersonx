@@ -399,6 +399,17 @@ button.primary:not(:disabled):hover {
 #mods-list li.on .mod-title { font-weight: 600; color: #2f7d1f; }
 #mods-list li button.small { height: 22px; padding: 0 8px; font-size: 11px; }
 
+/* podpowiedź pod suwakiem RAM */
+#ram-hint {
+  margin: -4px 0 8px 82px;
+  min-height: 14px;
+  font-size: 11px;
+  text-shadow: 0 1px 2px #000;
+}
+#ram-hint.good { color: #9fe07a; }
+#ram-hint.info { color: #f0d070; }
+#ram-hint.bad { color: #ff8a7a; }
+
 /* skin obok nicku */
 #head {
   width: 24px;

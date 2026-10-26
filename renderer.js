@@ -93,9 +93,10 @@ async function init() {
   $("app-version").textContent = await window.api.appVersion();
 
   $("nick").value = settings.nick || "";
-  $("ram").max = Math.max(2, totalRam - 2);
+  systemRam = totalRam;
+  $("ram").max = Math.max(2, totalRam);
   $("ram").value = settings.ram || 4;
-  $("ram-val").textContent = `${$("ram").value} GB`;
+  updateRam();
 
   drawHead(null);
   window.api.restoreLogin().then(account => {
@@ -123,7 +124,29 @@ async function init() {
 
 $("nick").onchange = persist;
 $("version").onchange = persist;
-$("ram").oninput = () => { $("ram-val").textContent = `${$("ram").value} GB`; };
+// Suwak sięga całej pamięci komputera; podpowiedź ostrzega przed zbyt dużą ilością
+let systemRam = 16;
+
+function updateRam() {
+  const ram = Number($("ram").value);
+  $("ram-val").textContent = `${ram} GB`;
+  const hint = $("ram-hint");
+  if (systemRam - ram < 2) {
+    hint.className = "bad";
+    hint.textContent = `Dla Windowsa zostanie ${Math.max(0, systemRam - ram)} GB — komputer i gra mogą się zacinać`;
+  } else if (ram > 12) {
+    hint.className = "info";
+    hint.textContent = "Ponad 12 GB rzadko pomaga, a może wydłużać przycięcia";
+  } else if (ram >= 4) {
+    hint.className = "good";
+    hint.textContent = "Dobra ilość dla paczki modów";
+  } else {
+    hint.className = "bad";
+    hint.textContent = "Za mało dla paczki modów — ustaw co najmniej 4 GB";
+  }
+}
+
+$("ram").oninput = updateRam;
 $("ram").onchange = persist;
 
 // ---------- Okno „Własne mody” ----------
