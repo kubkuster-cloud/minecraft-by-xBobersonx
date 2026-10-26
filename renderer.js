@@ -27,6 +27,7 @@ function persist() {
   };
   settings.afterLaunch = $("after-launch").value;
   settings.javaArgs = $("java-args").value.trim();
+  settings.syncOptions = $("sync-options").checked;
   window.api.saveSettings(settings);
 }
 
@@ -121,6 +122,7 @@ async function init() {
   updateWindowInputs();
   $("after-launch").value = settings.afterLaunch || "tray";
   $("java-args").value = settings.javaArgs || "";
+  $("sync-options").checked = settings.syncOptions !== false;
   $("about-version").textContent = $("app-version").textContent;
 
   setAccount(null);
@@ -207,6 +209,7 @@ $("win-width").onchange = persist;
 $("win-height").onchange = persist;
 $("after-launch").onchange = persist;
 $("java-args").onchange = persist;
+$("sync-options").onchange = persist;
 
 document.querySelectorAll(".nav-item").forEach(item => {
   item.onclick = () => {
@@ -610,6 +613,7 @@ $("btn-play").onclick = async () => {
       window: settings.window,
       afterLaunch: settings.afterLaunch || "tray",
       javaArgs: settings.javaArgs || "",
+      syncOptions: settings.syncOptions !== false,
     });
   } catch (err) {
     setStatus("Błąd uruchamiania — szczegóły w ustawieniach (⚙)");

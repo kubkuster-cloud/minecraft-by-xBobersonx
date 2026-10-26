@@ -10,6 +10,7 @@ const { getJava, JVM_FLAGS } = require("./java");
 const content = require("./content");
 const { analyze, findCrashReport } = require("./crash");
 const disk = require("./disk");
+const gameOptions = require("./options");
 
 const ICON = path.join(__dirname, "assets", "icon.png");
 
@@ -29,6 +30,7 @@ const DEFAULT_OPTIONS = [
 const GAME_DIR = path.join(app.getPath("appData"), ".minecraft_by_xbobersonx");
 const SETTINGS_FILE = path.join(GAME_DIR, "launcher_settings.json");
 const ACCOUNT_FILE = path.join(GAME_DIR, "account.dat");
+const SHARED_OPTIONS = path.join(GAME_DIR, "shared-options.txt");
 const MANIFEST_URL = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
 const FABRIC_META = "https://meta.fabricmc.net/v2/versions/loader";
 
@@ -429,7 +431,7 @@ function splitArgs(text) {
   return (text.match(/"[^"]*"|\S+/g) || []).map(a => a.replace(/^"|"$/g, ""));
 }
 
-ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader, window: gameWindow, afterLaunch, javaArgs }) => {
+ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader, window: gameWindow, afterLaunch, javaArgs, syncOptions }) => {
   const launcher = new Client();
   const send = (ch, data) => win && !win.isDestroyed() && win.webContents.send(ch, data);
 
@@ -457,6 +459,13 @@ ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader, win
     });
     // Fabric nie czyta podfolderów mods/, więc wskazujemy mu preinstalled/ wprost
     jvmArgs.push(`-Dfabric.addMods=${preinstalled}`);
+
+    // wspólne ustawienia dla wszystkich wersji (sterowanie, myszka, dźwięk, grafika)
+    if (syncOptions) {
+      const seededFrom = gameOptions.seed(GAME_DIR, SHARED_OPTIONS);
+      if (seededFrom) send("game:log", `[ustawienia] Wspólne ustawienia utworzone z ${seededFrom}`);
+      if (gameOptions.push(packDir(version), SHARED_OPTIONS)) send("game:log", "[ustawienia] Wgrano wspólne ustawienia");
+    }
 
     // domyślne ustawienia tylko dla wersji, w której gra jeszcze ich nie zapisała
     // (options.txt mógł powstać wcześniej z samą listą paczek tekstur)
@@ -488,6 +497,7 @@ ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader, win
   });
   launcher.on("close", code => {
     gameRunning = false;
+    if (syncOptions && loader === "pack") gameOptions.pull(packDir(version), SHARED_OPTIONS);
     showFromTray();
     send("game:closed", code);
     const instanceDir = loader === "pack" ? packDir(version) : GAME_DIR;

@@ -10,6 +10,7 @@ Launcher do Minecrafta w stylu starego „Minecraft by Zyczu”, z wbudowaną pa
 - **Szukaj modów** — zakładka z wyszukiwarką Modrinth: mody pasujące do wybranej wersji gry instalujesz jednym kliknięciem, razem z wymaganymi bibliotekami
 - **Shadery i paczki tekstur** — zakładki z wyszukiwarką Modrinth (shadery działające z Iris); zainstalowany shader lub paczka włącza się od razu, a w oknie wybierasz aktywny shader i włączasz/wyłączasz paczki tekstur
 - **Granie bez internetu** — bez połączenia launcher uruchamia grę na tym, co już jest pobrane (wersje, Fabric, Java, mody, zapisany profil konta Microsoft); mody sprawdzane są w Modrinth najwyżej co 6 godzin, więc start jest szybszy
+- **Wspólne ustawienia dla wszystkich wersji** — sterowanie (także klawisze modów), czułość myszki, dźwięk i grafika ustawiasz raz i masz w każdej wersji gry (paczki tekstur zostają osobne); można wyłączyć w ⚙ → Gra
 - **Ustawienia z zakładkami** — Gra (RAM z szybkim wyborem i „Zalecane”, rozmiar okna / pełny ekran, co robi launcher po starcie gry, dodatkowe argumenty Javy), Konto, Wygląd, Dysk, Konsola (kopiowanie logów), O launcherze (sprawdzanie aktualizacji)
 - **Własne tło** — w ustawieniach (⚙) wybierasz dowolny obraz (np. screenshot z gry) jako tło launchera; „Przywróć domyślne” wraca do standardowego
 - **Miejsce na dysku** — w ustawieniach (⚙): ile zajmuje każda wersja (światy, mody, shadery), pliki wspólne i śmieci; „Wyczyść śmieci” usuwa logi, raporty crashy, stare wersje Fabric i nieużywaną Javę, a niepotrzebną wersję usuniesz jednym kliknięciem
