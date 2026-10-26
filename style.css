@@ -399,9 +399,87 @@ button.primary:not(:disabled):hover {
 #mods-list li.on .mod-title { font-weight: 600; color: #2f7d1f; }
 #mods-list li button.small { height: 22px; padding: 0 8px; font-size: 11px; }
 
+/* ---------- Ustawienia z zakładkami ---------- */
+.settings-dialog { width: 660px; }
+.settings-body { display: flex; gap: 12px; height: 330px; }
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 150px;
+  flex-shrink: 0;
+  padding: 4px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+.nav-item {
+  justify-content: flex-start;
+  height: 30px;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: #fff;
+  text-shadow: 0 1px 2px #000;
+}
+.nav-item:hover { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.25); }
+.nav-item.active {
+  background: linear-gradient(rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.12));
+  border-color: rgba(255, 255, 255, 0.5);
+  font-weight: 600;
+}
+.settings-pages { flex: 1; min-width: 0; overflow-y: auto; padding-right: 4px; }
+.page h3 {
+  margin: 4px 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #cfe8ff;
+  text-shadow: 0 1px 2px #000;
+}
+.page h3:not(:first-child) { margin-top: 14px; }
+.page .row label { width: auto; }
+.page .grow { flex: 1; }
+.page label.check { display: flex; align-items: center; gap: 6px; text-shadow: 0 1px 2px #000; }
+.page input[type=checkbox] { width: 14px; height: 14px; flex: none; accent-color: #4caf2a; }
+.page .num { flex: 0 0 70px; }
+.page .note { font-size: 11px; color: #d8dde3; line-height: 1.5; text-shadow: 0 1px 2px #000; margin-top: 8px; }
+.presets { display: flex; gap: 4px; margin-bottom: 6px; }
+.presets button { height: 24px; padding: 0 10px; font-size: 11px; }
+.presets button.selected { border-color: #3c7fb1; background: linear-gradient(#e5f4fc, #98d1ef); }
+.buttons.left { justify-content: flex-start; }
+.page #log { height: 270px; }
+
+.account-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+}
+#account-head { width: 64px; height: 64px; image-rendering: pixelated; border-radius: 4px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6); }
+.account-name { font-family: "Pixel", monospace; font-size: 14px; text-shadow: 2px 2px 0 #3f3f3f; }
+.account-type { margin-top: 6px; color: #cfe8ff; text-shadow: 0 1px 2px #000; }
+
+#bg-preview {
+  display: block;
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+  margin-bottom: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.about { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
+.about-icon { width: 64px; height: 64px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6); }
+.about-name { font-size: 15px; font-weight: 600; text-shadow: 0 1px 2px #000; }
+
 /* podpowiedź pod suwakiem RAM */
 #ram-hint {
-  margin: -4px 0 8px 82px;
+  margin: 0 0 4px;
   min-height: 14px;
   font-size: 11px;
   text-shadow: 0 1px 2px #000;

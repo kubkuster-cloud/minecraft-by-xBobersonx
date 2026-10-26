@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld("api", {
   getBackground: () => ipcRenderer.invoke("background:get"),
   chooseBackground: () => ipcRenderer.invoke("background:choose"),
   resetBackground: () => ipcRenderer.invoke("background:reset"),
+  checkUpdate: () => ipcRenderer.invoke("update:check"),
+  openGithub: () => ipcRenderer.invoke("open:github"),
   packName: () => ipcRenderer.invoke("pack:name"),
   fabricVersions: () => ipcRenderer.invoke("fabric:versions"),
   appVersion: () => ipcRenderer.invoke("app:version"),

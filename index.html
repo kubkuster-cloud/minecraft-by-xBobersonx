@@ -57,47 +57,135 @@
   </div>
 
   <div class="overlay" id="settings" hidden>
-    <div class="dialog glass">
+    <div class="dialog glass settings-dialog">
       <div class="panel-title">
         <span>Ustawienia</span>
         <button id="btn-close-settings" class="title-btn close" title="Zamknij">✕</button>
       </div>
 
-      <div class="row">
-        <label for="ram">Pamięć RAM:</label>
-        <input type="range" id="ram" min="1" max="16" value="4">
-        <span id="ram-val" class="value">4 GB</span>
-      </div>
-      <div id="ram-hint"></div>
+      <div class="settings-body">
+        <nav class="settings-nav">
+          <button class="nav-item active" data-page="game">🎮 Gra</button>
+          <button class="nav-item" data-page="account">👤 Konto</button>
+          <button class="nav-item" data-page="look">🖼️ Wygląd</button>
+          <button class="nav-item" data-page="disk">💾 Dysk</button>
+          <button class="nav-item" data-page="console">📜 Konsola</button>
+          <button class="nav-item" data-page="about">ℹ️ O launcherze</button>
+        </nav>
 
-      <div class="row">
-        <label>Konto:</label>
-        <span id="account" class="value wide">Non-premium (nick)</span>
-        <button id="btn-ms">Zaloguj przez Microsoft</button>
-        <button id="btn-logout" hidden>Wyloguj</button>
-      </div>
+        <div class="settings-pages">
+          <!-- Gra -->
+          <section class="page" data-page="game">
+            <h3>Pamięć RAM</h3>
+            <div class="row">
+              <input type="range" id="ram" min="1" max="16" value="4">
+              <span id="ram-val" class="value">4 GB</span>
+            </div>
+            <div class="presets">
+              <button class="ram-preset" data-gb="4">4 GB</button>
+              <button class="ram-preset" data-gb="6">6 GB</button>
+              <button class="ram-preset" data-gb="8">8 GB</button>
+              <button class="ram-preset" data-gb="10">10 GB</button>
+              <button id="btn-ram-auto" class="primary">Zalecane</button>
+            </div>
+            <div id="ram-hint"></div>
 
-      <div class="row">
-        <label>Tło:</label>
-        <span class="value wide" id="bg-name">Domyślne</span>
-        <button id="btn-bg-choose">
-          <svg viewBox="0 0 16 16"><path d="M2 3h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm1 8h10l-3-4-2.5 3L6 8.5z" fill="#5d8fc7"/><circle cx="5" cy="6" r="1.2" fill="#f0b429"/></svg>
-          Wybierz obraz…
-        </button>
-        <button id="btn-bg-reset" hidden>Przywróć domyślne</button>
-      </div>
+            <h3>Okno gry</h3>
+            <div class="row">
+              <label class="check"><input type="checkbox" id="win-fullscreen"> Pełny ekran</label>
+              <span class="grow"></span>
+              <input type="number" id="win-width" min="640" max="7680" step="1" class="num"> ×
+              <input type="number" id="win-height" min="480" max="4320" step="1" class="num">
+            </div>
 
-      <div class="row">
-        <label>Dysk:</label>
-        <span class="value wide">Ile miejsca zajmuje gra, sprzątanie</span>
-        <button id="btn-disk">
-          <svg viewBox="0 0 16 16"><path d="M2 3.5A1.5 1.5 0 0 1 3.5 2h9A1.5 1.5 0 0 1 14 3.5v9a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12.5zM4 10v2h8v-2z" fill="#5d6b7a"/><circle cx="11" cy="11" r=".9" fill="#7fd04f"/></svg>
-          Miejsce na dysku
-        </button>
-      </div>
+            <h3>Po uruchomieniu gry</h3>
+            <div class="row">
+              <select id="after-launch">
+                <option value="tray">Schowaj launcher do zasobnika (wróci po zamknięciu gry)</option>
+                <option value="keep">Zostaw launcher otwarty</option>
+                <option value="close">Zamknij launcher</option>
+              </select>
+            </div>
 
-      <label class="log-label">Konsola:</label>
-      <pre id="log"></pre>
+            <h3>Zaawansowane</h3>
+            <div class="row">
+              <input id="java-args" placeholder="Dodatkowe argumenty Javy, np. -Dsodium.checks.issue2561=false" spellcheck="false">
+            </div>
+          </section>
+
+          <!-- Konto -->
+          <section class="page" data-page="account" hidden>
+            <div class="account-card">
+              <canvas id="account-head" width="64" height="64"></canvas>
+              <div class="account-info">
+                <div id="account-name" class="account-name">—</div>
+                <div id="account" class="account-type">Non-premium (nick)</div>
+              </div>
+            </div>
+            <div class="buttons left">
+              <button id="btn-ms" class="primary">Zaloguj przez Microsoft</button>
+              <button id="btn-logout" hidden>Wyloguj</button>
+            </div>
+            <p class="note">
+              <b>Microsoft</b> — twój prawdziwy skin, gra na serwerach premium, logowanie zapamiętane.<br>
+              <b>Non-premium</b> — dowolny nick (wpisujesz go na ekranie głównym): single player, LAN i serwery non-premium.
+            </p>
+          </section>
+
+          <!-- Wygląd -->
+          <section class="page" data-page="look" hidden>
+            <h3>Tło launchera</h3>
+            <img id="bg-preview" alt="">
+            <div class="row">
+              <span class="value wide" id="bg-name">Domyślne</span>
+              <button id="btn-bg-choose">
+                <svg viewBox="0 0 16 16"><path d="M2 3h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm1 8h10l-3-4-2.5 3L6 8.5z" fill="#5d8fc7"/><circle cx="5" cy="6" r="1.2" fill="#f0b429"/></svg>
+                Wybierz obraz…
+              </button>
+              <button id="btn-bg-reset" hidden>Przywróć domyślne</button>
+            </div>
+            <p class="note">Najlepiej wygląda poziomy obraz, np. screenshot z gry (F2 w grze).</p>
+          </section>
+
+          <!-- Dysk -->
+          <section class="page" data-page="disk" hidden>
+            <h3>Pliki gry</h3>
+            <p class="note">Sprawdź, ile miejsca zajmuje każda wersja, wyczyść logi i stare pliki albo usuń niepotrzebną wersję.</p>
+            <div class="buttons left">
+              <button id="btn-disk" class="primary">
+                <svg viewBox="0 0 16 16"><path d="M2 3.5A1.5 1.5 0 0 1 3.5 2h9A1.5 1.5 0 0 1 14 3.5v9a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12.5zM4 10v2h8v-2z" fill="#5d6b7a"/><circle cx="11" cy="11" r=".9" fill="#7fd04f"/></svg>
+                Miejsce na dysku
+              </button>
+              <button id="btn-game-folder">Otwórz folder gry</button>
+            </div>
+          </section>
+
+          <!-- Konsola -->
+          <section class="page" data-page="console" hidden>
+            <pre id="log"></pre>
+            <div class="buttons">
+              <button id="btn-log-clear">Wyczyść</button>
+              <button id="btn-log-copy">Kopiuj</button>
+            </div>
+          </section>
+
+          <!-- O launcherze -->
+          <section class="page" data-page="about" hidden>
+            <div class="about">
+              <img src="assets/icon.png" alt="" class="about-icon">
+              <div>
+                <div class="about-name">Minecraft Launcher by xBobersonx</div>
+                <div class="note">Wersja <span id="about-version"></span></div>
+              </div>
+            </div>
+            <div class="buttons left">
+              <button id="btn-check-update" class="primary">Sprawdź aktualizacje</button>
+              <button id="btn-github">Strona na GitHubie</button>
+            </div>
+            <div id="update-status" class="note"></div>
+          </section>
+        </div>
+      </div>
     </div>
   </div>
 

@@ -20,6 +20,13 @@ function persist() {
   settings.nick = $("nick").value.trim();
   settings.version = $("version").value;
   settings.ram = Number($("ram").value);
+  settings.window = {
+    fullscreen: $("win-fullscreen").checked,
+    width: Number($("win-width").value) || 1280,
+    height: Number($("win-height").value) || 720,
+  };
+  settings.afterLaunch = $("after-launch").value;
+  settings.javaArgs = $("java-args").value.trim();
   window.api.saveSettings(settings);
 }
 
@@ -56,23 +63,31 @@ const DEFAULT_HEAD = [
 ];
 const HEAD_COLORS = { H: "#3b2a1a", S: "#b98a6a", s: "#a9785a", W: "#ffffff", B: "#4a3a8a", N: "#8a5a40", M: "#6a3a2a" };
 
+// Rysuje głowę na obu płótnach: obok nicku (24 px) i w karcie konta w ustawieniach (64 px)
 function drawHead(skinUrl) {
-  const ctx = $("head").getContext("2d");
-  ctx.imageSmoothingEnabled = false;
+  const canvases = [$("head"), $("account-head")];
   const drawDefault = () => {
-    ctx.clearRect(0, 0, 24, 24);
-    DEFAULT_HEAD.forEach((row, y) => [...row].forEach((c, x) => {
-      ctx.fillStyle = HEAD_COLORS[c];
-      ctx.fillRect(x * 3, y * 3, 3, 3);
-    }));
+    for (const c of canvases) {
+      const ctx = c.getContext("2d");
+      const px = c.width / 8;
+      ctx.clearRect(0, 0, c.width, c.height);
+      DEFAULT_HEAD.forEach((row, y) => [...row].forEach((ch, x) => {
+        ctx.fillStyle = HEAD_COLORS[ch];
+        ctx.fillRect(x * px, y * px, px, px);
+      }));
+    }
   };
   if (!skinUrl) return drawDefault();
 
   const img = new Image();
   img.onload = () => {
-    ctx.clearRect(0, 0, 24, 24);
-    ctx.drawImage(img, 8, 8, 8, 8, 0, 0, 24, 24);   // twarz
-    ctx.drawImage(img, 40, 8, 8, 8, 0, 0, 24, 24);  // druga warstwa (czapka, włosy)
+    for (const c of canvases) {
+      const ctx = c.getContext("2d");
+      ctx.imageSmoothingEnabled = false;
+      ctx.clearRect(0, 0, c.width, c.height);
+      ctx.drawImage(img, 8, 8, 8, 8, 0, 0, c.width, c.height);   // twarz
+      ctx.drawImage(img, 40, 8, 8, 8, 0, 0, c.width, c.height);  // druga warstwa (czapka, włosy)
+    }
   };
   img.onerror = drawDefault;
   img.src = skinUrl;
@@ -80,7 +95,8 @@ function drawHead(skinUrl) {
 
 function setAccount(name, skin, offline) {
   drawHead(name ? skin : null);
-  $("account").textContent = name ? `Microsoft: ${name}${offline ? " (offline)" : ""}` : "Non-premium (nick)";
+  $("account-name").textContent = name || $("nick").value.trim() || "—";
+  $("account").textContent = name ? `Konto Microsoft${offline ? " (offline)" : ""}` : "Konto non-premium";
   $("btn-ms").hidden = !!name;
   $("btn-logout").hidden = !name;
   $("nick").disabled = !!name;
@@ -95,10 +111,19 @@ async function init() {
   $("nick").value = settings.nick || "";
   systemRam = totalRam;
   $("ram").max = Math.max(2, totalRam);
-  $("ram").value = settings.ram || 4;
+  $("ram").value = settings.ram || recommendedRam();
   updateRam();
 
-  drawHead(null);
+  const w = settings.window || {};
+  $("win-fullscreen").checked = !!w.fullscreen;
+  $("win-width").value = w.width || 1280;
+  $("win-height").value = w.height || 720;
+  updateWindowInputs();
+  $("after-launch").value = settings.afterLaunch || "tray";
+  $("java-args").value = settings.javaArgs || "";
+  $("about-version").textContent = $("app-version").textContent;
+
+  setAccount(null);
   window.api.restoreLogin().then(account => {
     if (account) setAccount(account.name, account.skin, account.offline);
   });
@@ -122,14 +147,27 @@ async function init() {
   }
 }
 
-$("nick").onchange = persist;
+$("nick").onchange = () => {
+  persist();
+  if ($("btn-logout").hidden) $("account-name").textContent = $("nick").value.trim() || "—";
+};
 $("version").onchange = persist;
 // Suwak sięga całej pamięci komputera; podpowiedź ostrzega przed zbyt dużą ilością
 let systemRam = 16;
 
+// Około połowy pamięci komputera, w granicach 4–10 GB
+function recommendedRam() {
+  return Math.min(10, Math.max(4, Math.round(systemRam / 2)));
+}
+
 function updateRam() {
   const ram = Number($("ram").value);
   $("ram-val").textContent = `${ram} GB`;
+  document.querySelectorAll(".ram-preset").forEach(b => {
+    b.classList.toggle("selected", Number(b.dataset.gb) === ram);
+    b.disabled = Number(b.dataset.gb) > systemRam;
+  });
+  $("btn-ram-auto").textContent = `Zalecane (${recommendedRam()} GB)`;
   const hint = $("ram-hint");
   if (systemRam - ram < 2) {
     hint.className = "bad";
@@ -148,6 +186,52 @@ function updateRam() {
 
 $("ram").oninput = updateRam;
 $("ram").onchange = persist;
+
+function setRam(gb) {
+  $("ram").value = gb;
+  updateRam();
+  persist();
+}
+document.querySelectorAll(".ram-preset").forEach(b => { b.onclick = () => setRam(Number(b.dataset.gb)); });
+$("btn-ram-auto").onclick = () => setRam(recommendedRam());
+
+// ---------- Pozostałe ustawienia ----------
+
+function updateWindowInputs() {
+  const full = $("win-fullscreen").checked;
+  $("win-width").disabled = full;
+  $("win-height").disabled = full;
+}
+$("win-fullscreen").onchange = () => { updateWindowInputs(); persist(); };
+$("win-width").onchange = persist;
+$("win-height").onchange = persist;
+$("after-launch").onchange = persist;
+$("java-args").onchange = persist;
+
+document.querySelectorAll(".nav-item").forEach(item => {
+  item.onclick = () => {
+    document.querySelectorAll(".nav-item").forEach(i => i.classList.toggle("active", i === item));
+    document.querySelectorAll(".page").forEach(p => { p.hidden = p.dataset.page !== item.dataset.page; });
+  };
+});
+
+function showSettingsPage(page) {
+  document.querySelector(`.nav-item[data-page="${page}"]`).click();
+  $("settings").hidden = false;
+}
+
+$("btn-game-folder").onclick = () => window.api.diskOpen();
+$("btn-log-clear").onclick = () => { $("log").textContent = ""; };
+$("btn-log-copy").onclick = async () => {
+  await navigator.clipboard.writeText($("log").textContent);
+  $("btn-log-copy").textContent = "Skopiowano!";
+  setTimeout(() => { $("btn-log-copy").textContent = "Kopiuj"; }, 1500);
+};
+$("btn-github").onclick = () => window.api.openGithub();
+$("btn-check-update").onclick = async () => {
+  $("update-status").textContent = "Sprawdzanie…";
+  $("update-status").textContent = await window.api.checkUpdate();
+};
 
 // ---------- Okno „Własne mody” ----------
 let modsTab = "own";
@@ -517,7 +601,16 @@ $("btn-play").onclick = async () => {
   setPlaying(true);
   setStatus("Przygotowywanie…", 0);
   try {
-    await window.api.launch({ nick, version, type: "release", ram: Number($("ram").value), loader });
+    await window.api.launch({
+      nick,
+      version,
+      type: "release",
+      ram: Number($("ram").value),
+      loader,
+      window: settings.window,
+      afterLaunch: settings.afterLaunch || "tray",
+      javaArgs: settings.javaArgs || "",
+    });
   } catch (err) {
     setStatus("Błąd uruchamiania — szczegóły w ustawieniach (⚙)");
     log(String(err));
@@ -606,7 +699,7 @@ $("btn-close-crash").onclick = closeCrash;
 $("btn-crash-report").onclick = () => crashReport && window.api.openCrashReport(crashReport);
 $("btn-crash-log").onclick = () => {
   closeCrash();
-  $("settings").hidden = false;
+  showSettingsPage("console");
 };
 
 // ---------- Okno „Miejsce na dysku” ----------
@@ -706,6 +799,7 @@ $("btn-disk-clean").onclick = async () => {
 // url = data URL własnego obrazu albo null dla domyślnego tła
 function setBackground(url) {
   $("bg-img").src = url || "assets/background.png";
+  $("bg-preview").src = url || "assets/background.png";
   $("bg-name").textContent = url ? "Własny obraz" : "Domyślne";
   $("btn-bg-reset").hidden = !url;
 }
@@ -718,6 +812,6 @@ $("btn-bg-reset").onclick = async () => {
   await window.api.resetBackground();
   setBackground(null);
 };
-window.api.getBackground().then(url => { if (url) setBackground(url); });
+window.api.getBackground().then(url => setBackground(url));
 
 init();

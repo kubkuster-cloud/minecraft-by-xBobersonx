@@ -79,6 +79,23 @@ function setupAutoUpdate() {
 
 ipcMain.handle("update:install", () => autoUpdater.quitAndInstall());
 
+// Ręczne sprawdzenie aktualizacji z ustawień — zwraca tekst do pokazania
+ipcMain.handle("update:check", async () => {
+  if (!app.isPackaged || process.env.PORTABLE_EXECUTABLE_DIR) {
+    return "Automatyczne aktualizacje działają tylko w wersji zainstalowanej z instalatora (Setup.exe).";
+  }
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    const latest = result && result.updateInfo ? result.updateInfo.version : null;
+    if (!latest || latest === app.getVersion()) return `Masz najnowszą wersję (${app.getVersion()}).`;
+    return `Jest nowa wersja ${latest} — pobieranie w tle, pasek u góry pokaże, kiedy będzie gotowa.`;
+  } catch (err) {
+    return `Nie udało się sprawdzić aktualizacji: ${err.message}`;
+  }
+});
+
+ipcMain.handle("open:github", () => shell.openExternal("https://github.com/kubkuster-cloud/minecraft-by-xBobersonx"));
+
 function createWindow() {
   win = new BrowserWindow({
     width: 860,
@@ -407,7 +424,12 @@ ipcMain.handle("background:reset", () => {
   if (old) fs.rmSync(old, { force: true });
 });
 
-ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader }) => {
+// "-Da=1 -Xss2M" -> ["-Da=1", "-Xss2M"]; cudzysłowy grupują argumenty ze spacjami
+function splitArgs(text) {
+  return (text.match(/"[^"]*"|\S+/g) || []).map(a => a.replace(/^"|"$/g, ""));
+}
+
+ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader, window: gameWindow, afterLaunch, javaArgs }) => {
   const launcher = new Client();
   const send = (ch, data) => win && !win.isDestroyed() && win.webContents.send(ch, data);
 
@@ -427,7 +449,7 @@ ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader }) =
     progress: p => send("game:progress", p),
   });
 
-  const jvmArgs = [...JVM_FLAGS];
+  const jvmArgs = [...JVM_FLAGS, ...splitArgs(javaArgs || "")];
   if (loader === "pack") {
     const preinstalled = await installPack(packDir(version), version, {
       log: msg => send("game:log", msg),
@@ -461,7 +483,8 @@ ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader }) =
   launcher.on("arguments", () => {
     gameRunning = true;
     send("game:started");
-    hideToTray();
+    if (afterLaunch === "close") setTimeout(() => app.quit(), 3000); // gra działa dalej jako osobny proces
+    else if (afterLaunch !== "keep") hideToTray();
   });
   launcher.on("close", code => {
     gameRunning = false;
@@ -484,6 +507,9 @@ ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader }) =
     javaPath,
     overrides: loader === "pack" ? { gameDirectory: packDir(version) } : {},
     customArgs: jvmArgs,
+    window: gameWindow && gameWindow.fullscreen
+      ? { fullscreen: true }
+      : { width: (gameWindow && gameWindow.width) || 1280, height: (gameWindow && gameWindow.height) || 720 },
   });
   if (!proc) throw new Error("Nie udało się uruchomić gry (sprawdź logi).");
   return true;
