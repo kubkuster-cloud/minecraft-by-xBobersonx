@@ -678,4 +678,23 @@ $("btn-disk-clean").onclick = async () => {
   }
 };
 
+// ---------- Własne tło ----------
+
+// url = data URL własnego obrazu albo null dla domyślnego tła
+function setBackground(url) {
+  $("bg-img").src = url || "assets/background.png";
+  $("bg-name").textContent = url ? "Własny obraz" : "Domyślne";
+  $("btn-bg-reset").hidden = !url;
+}
+
+$("btn-bg-choose").onclick = async () => {
+  const url = await window.api.chooseBackground();
+  if (url) setBackground(url);
+};
+$("btn-bg-reset").onclick = async () => {
+  await window.api.resetBackground();
+  setBackground(null);
+};
+window.api.getBackground().then(url => { if (url) setBackground(url); });
+
 init();

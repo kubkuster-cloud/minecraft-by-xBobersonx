@@ -356,6 +356,57 @@ ipcMain.handle("disk:delete-version", async (_e, { version, worlds }) => {
 });
 ipcMain.handle("disk:open", () => shell.openPath(GAME_DIR));
 
+// ---------- Własne tło launchera ----------
+const BG_TYPES = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif" };
+
+function customBackground() {
+  if (!fs.existsSync(GAME_DIR)) return null;
+  const name = fs.readdirSync(GAME_DIR).find(n => n.startsWith("background.") && BG_TYPES[path.extname(n).toLowerCase()]);
+  return name ? path.join(GAME_DIR, name) : null;
+}
+
+// Obraz jako data URL — strona launchera nie może czytać plików spoza swojego folderu
+function asDataUrl(file) {
+  return `data:${BG_TYPES[path.extname(file).toLowerCase()]};base64,${fs.readFileSync(file).toString("base64")}`;
+}
+
+// Folder ze screenshotami z ostatnio używanej wersji — tam okno wyboru otwiera się na start
+function screenshotsDir() {
+  const instances = path.join(GAME_DIR, "instances");
+  if (!fs.existsSync(instances)) return app.getPath("pictures");
+  const dirs = fs.readdirSync(instances)
+    .map(n => path.join(instances, n, "screenshots"))
+    .filter(d => fs.existsSync(d))
+    .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+  return dirs[0] || app.getPath("pictures");
+}
+
+ipcMain.handle("background:get", () => {
+  const file = customBackground();
+  return file ? asDataUrl(file) : null;
+});
+
+ipcMain.handle("background:choose", async () => {
+  const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+    title: "Wybierz tło launchera",
+    defaultPath: screenshotsDir(),
+    filters: [{ name: "Obrazy", extensions: ["png", "jpg", "jpeg", "webp", "gif"] }],
+    properties: ["openFile"],
+  });
+  if (canceled || !filePaths[0]) return null;
+  const old = customBackground();
+  if (old) fs.rmSync(old, { force: true });
+  const target = path.join(GAME_DIR, `background${path.extname(filePaths[0]).toLowerCase()}`);
+  fs.mkdirSync(GAME_DIR, { recursive: true });
+  fs.copyFileSync(filePaths[0], target);
+  return asDataUrl(target);
+});
+
+ipcMain.handle("background:reset", () => {
+  const old = customBackground();
+  if (old) fs.rmSync(old, { force: true });
+});
+
 ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader }) => {
   const launcher = new Client();
   const send = (ch, data) => win && !win.isDestroyed() && win.webContents.send(ch, data);
