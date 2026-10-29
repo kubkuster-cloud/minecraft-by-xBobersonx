@@ -361,4 +361,82 @@ async function installOwnMod(instanceDir, gameVersion, projectId, log) {
   return files.map(f => f.name);
 }
 
-module.exports = { installPack, packName: PACK.name, listMods, setModEnabled, searchMods, installOwnMod };
+// ---------- Aktualizacje własnych modów ----------
+
+async function postJson(url, body) {
+  const res = await fetch(url, { method: "POST", headers: { ...HEADERS, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(`Modrinth: ${res.status}`);
+  return res.json();
+}
+
+// Rozpoznaje własne mody po sha1 (także te wrzucone ręcznie): { plik: wersja z Modrinth }
+async function identifyOwn(modsDir) {
+  const jars = fs.existsSync(modsDir)
+    ? fs.readdirSync(modsDir).filter(n => n.endsWith(".jar") || n.endsWith(".jar" + DISABLED))
+    : [];
+  if (jars.length === 0) return new Map();
+  const byHash = new Map(jars.map(n => [sha1(path.join(modsDir, n)), n.endsWith(DISABLED) ? n.slice(0, -DISABLED.length) : n]));
+  const versions = await postJson(`${API}/version_files`, { hashes: [...byHash.keys()], algorithm: "sha1" });
+  const result = new Map();
+  for (const [hash, name] of byHash) if (versions[hash]) result.set(name, versions[hash]);
+  return result;
+}
+
+// Lista własnych modów, dla których jest nowsza wersja na tę wersję gry
+async function checkOwnUpdates(instanceDir, gameVersion) {
+  const known = await identifyOwn(path.join(instanceDir, "mods"));
+  const entries = [...known];
+  const latest = await pool(entries, PARALLEL, ([, current]) => listVersions(current.project_id, gameVersion));
+  const updates = [];
+  entries.forEach(([file, current], i) => {
+    const versions = latest[i];
+    const next = versions.find(v => v.version_type === "release") || versions[0];
+    if (!next || next.id === current.id) return;
+    if (new Date(next.date_published) <= new Date(current.date_published)) return; // nie cofamy do starszej
+    updates.push({
+      file,
+      id: current.project_id,
+      from: current.version_number,
+      to: next.version_number,
+      changelog: (next.changelog || "").replace(/[#*_`>]/g, "").trim().slice(0, 300),
+    });
+  });
+  return updates;
+}
+
+// Podmienia własny mod na najnowszą wersję (z brakującymi bibliotekami); wyłączony zostaje wyłączony
+async function updateOwnMod(instanceDir, gameVersion, file, log) {
+  const modsDir = path.join(instanceDir, "mods");
+  const known = await identifyOwn(modsDir);
+  const current = known.get(file);
+  if (!current) throw new Error("Nie rozpoznano tego moda na Modrinth");
+
+  const skip = installedIds(instanceDir);
+  for (const v of known.values()) skip.add(v.project_id);
+  skip.delete(current.project_id);
+  const files = await resolve([current.project_id], gameVersion, log, skip);
+  const main = files.find(f => f.id === current.project_id);
+  if (!main) throw new Error(`Brak wersji dla ${gameVersion}`);
+
+  const wasDisabled = fs.existsSync(path.join(modsDir, file + DISABLED));
+  await pool(files, PARALLEL, f => download(f, modsDir, log));
+  if (main.name !== file) {
+    fs.rmSync(path.join(modsDir, file), { force: true });
+    fs.rmSync(path.join(modsDir, file + DISABLED), { force: true });
+  }
+  if (wasDisabled) {
+    fs.rmSync(path.join(modsDir, main.name + DISABLED), { force: true });
+    renameMod(modsDir, main.name, false);
+  }
+
+  const own = readOwn(instanceDir);
+  delete own[file];
+  for (const f of files) own[f.name] = f.id;
+  fs.writeFileSync(ownFile(instanceDir), JSON.stringify(own, null, 2));
+  return main.name;
+}
+
+module.exports = {
+  installPack, packName: PACK.name, listMods, setModEnabled, searchMods, installOwnMod,
+  checkOwnUpdates, updateOwnMod, pool, sha1,
+};

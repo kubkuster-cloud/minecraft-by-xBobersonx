@@ -21,7 +21,7 @@ function subdirs(dir) {
 function neededJava(gameDir) {
   const ids = new Set([
     ...subdirs(path.join(gameDir, "versions")).filter(n => !n.startsWith("fabric-loader-")),
-    ...subdirs(path.join(gameDir, "instances")).filter(n => n.startsWith("pack-")).map(n => n.slice("pack-".length)),
+    ...subdirs(path.join(gameDir, "instances")).map(n => instanceInfo(gameDir, n).gameVersion).filter(Boolean),
   ]);
   const needed = new Set();
   for (const id of ids) {
@@ -72,10 +72,25 @@ function junkPaths(gameDir, updaterCache) {
   ];
 }
 
+// Folder w instances/: paczka xBobersonx (pack-<wersja>) albo modpack (mp-<slug>)
+function instanceInfo(gameDir, name) {
+  if (name.startsWith("pack-")) {
+    const version = name.slice("pack-".length);
+    return { gameVersion: version, label: `Minecraft ${version}`, modpack: false };
+  }
+  try {
+    const info = JSON.parse(fs.readFileSync(path.join(gameDir, "instances", name, ".xbobersonx-modpack.json"), "utf8"));
+    return { gameVersion: info.gameVersion, label: `📦 ${info.title} (${info.gameVersion})`, modpack: true };
+  } catch {
+    return { gameVersion: null, label: name, modpack: true };
+  }
+}
+
 async function scan(gameDir, updaterCache) {
   const versions = [];
-  for (const name of subdirs(path.join(gameDir, "instances")).filter(n => n.startsWith("pack-"))) {
+  for (const name of subdirs(path.join(gameDir, "instances")).filter(n => n.startsWith("pack-") || n.startsWith("mp-"))) {
     const dir = path.join(gameDir, "instances", name);
+    const meta = instanceInfo(gameDir, name);
     const [total, saves, mods, shaders, packs] = await Promise.all([
       sizeOf(dir),
       sizeOf(path.join(dir, "saves")),
@@ -83,17 +98,20 @@ async function scan(gameDir, updaterCache) {
       sizeOf(path.join(dir, "shaderpacks")),
       sizeOf(path.join(dir, "resourcepacks")),
     ]);
-    const version = name.slice("pack-".length);
-    const jar = await sizeOf(path.join(gameDir, "versions", version));
+    // plik gry liczymy przy paczce xBobersonx (modpack tej samej wersji korzysta z tego samego)
+    const jar = meta.modpack || !meta.gameVersion ? 0 : await sizeOf(path.join(gameDir, "versions", meta.gameVersion));
     const worlds = subdirs(path.join(dir, "saves")).length;
     versions.push({
-      version,
+      key: name,
+      label: meta.label,
+      version: meta.gameVersion || "",
+      modpack: meta.modpack,
       size: total + jar,
       worlds,
       parts: { saves, mods, content: shaders + packs, other: total - saves - mods - shaders - packs + jar },
     });
   }
-  versions.sort((a, b) => b.version.localeCompare(a.version, undefined, { numeric: true }));
+  versions.sort((a, b) => (a.modpack - b.modpack) || b.version.localeCompare(a.version, undefined, { numeric: true }));
 
   const [assets, libraries, java, versionFiles] = await Promise.all([
     sizeOf(path.join(gameDir, "assets")),
@@ -135,16 +153,23 @@ async function cleanJunk(gameDir, updaterCache) {
   return freed;
 }
 
-// Usuwa wersję razem ze światami, modami i plikami gry tej wersji
-async function deleteVersion(gameDir, version) {
-  const targets = [
-    path.join(gameDir, "instances", `pack-${version}`),
-    path.join(gameDir, "versions", version),
-    path.join(gameDir, "natives", version),
-    ...subdirs(path.join(gameDir, "versions"))
-      .filter(n => n.startsWith("fabric-loader-") && n.endsWith(`-${version}`))
-      .map(n => path.join(gameDir, "versions", n)),
-  ];
+// Usuwa folder z instances/ (wersję paczki albo modpack) razem ze światami i modami.
+// Pliki gry tej wersji usuwamy tylko, jeśli nie korzysta z nich żaden inny folder.
+async function deleteVersion(gameDir, key) {
+  const meta = instanceInfo(gameDir, key);
+  const targets = [path.join(gameDir, "instances", key)];
+  const version = meta.gameVersion;
+  const stillUsed = subdirs(path.join(gameDir, "instances"))
+    .some(n => n !== key && instanceInfo(gameDir, n).gameVersion === version);
+  if (version && !stillUsed) {
+    targets.push(
+      path.join(gameDir, "versions", version),
+      path.join(gameDir, "natives", version),
+      ...subdirs(path.join(gameDir, "versions"))
+        .filter(n => n.startsWith("fabric-loader-") && n.endsWith(`-${version}`))
+        .map(n => path.join(gameDir, "versions", n)),
+    );
+  }
   let freed = 0;
   for (const t of targets) {
     freed += await sizeOf(t);

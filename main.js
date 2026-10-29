@@ -5,7 +5,10 @@ const fs = require("fs");
 const { Client, Authenticator } = require("minecraft-launcher-core");
 const { Auth } = require("msmc");
 const { autoUpdater } = require("electron-updater");
-const { installPack, packName, listMods, setModEnabled, searchMods, installOwnMod } = require("./modpack");
+const {
+  installPack, packName, listMods, setModEnabled, searchMods, installOwnMod, checkOwnUpdates, updateOwnMod,
+} = require("./modpack");
+const mrpack = require("./mrpack");
 const { getJava, JVM_FLAGS } = require("./java");
 const content = require("./content");
 const { analyze, findCrashReport } = require("./crash");
@@ -168,20 +171,25 @@ ipcMain.handle("versions:list", async () => {
     versions: data.versions.map(v => ({ id: v.id, type: v.type })),
     offline,
     installed: installedVersions(),
+    modpacks: mrpack.listModpacks(GAME_DIR),
   };
 });
 
 // Pobiera profil Fabric dla danej wersji gry i zapisuje go w versions/,
 // zwraca jego id (np. "fabric-loader-0.16.10-1.21.1") do użycia jako version.custom.
 // Bez internetu używa wcześniej zapisanego profilu.
-async function installFabric(gameVersion) {
+// loaderVersion: konkretna wersja Fabric Loadera (modpacki jej wymagają); bez niej — najnowsza stabilna
+async function installFabric(gameVersion, loaderVersion) {
   try {
-    const res = await fetch(`${FABRIC_META}/${gameVersion}`);
-    const loaders = await res.json();
-    if (!Array.isArray(loaders) || loaders.length === 0) {
-      throw new Error(`Fabric nie jest dostępny dla wersji ${gameVersion}`);
+    let loader = loaderVersion;
+    if (!loader) {
+      const res = await fetch(`${FABRIC_META}/${gameVersion}`);
+      const loaders = await res.json();
+      if (!Array.isArray(loaders) || loaders.length === 0) {
+        throw new Error(`Fabric nie jest dostępny dla wersji ${gameVersion}`);
+      }
+      loader = (loaders.find(l => l.loader.stable) || loaders[0]).loader.version;
     }
-    const loader = (loaders.find(l => l.loader.stable) || loaders[0]).loader.version;
 
     const profileRes = await fetch(`${FABRIC_META}/${gameVersion}/${loader}/profile/json`);
     const profile = await profileRes.json();
@@ -191,9 +199,11 @@ async function installFabric(gameVersion) {
     return profile.id;
   } catch (err) {
     const versionsDir = path.join(GAME_DIR, "versions");
+    const wanted = loaderVersion ? `fabric-loader-${loaderVersion}-${gameVersion}` : null;
     const saved = fs.existsSync(versionsDir)
       ? fs.readdirSync(versionsDir)
           .filter(n => n.startsWith("fabric-loader-") && n.endsWith(`-${gameVersion}`))
+          .filter(n => !wanted || n === wanted)
           .filter(n => fs.existsSync(path.join(versionsDir, n, `${n}.json`)))
           .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
       : [];
@@ -214,28 +224,66 @@ function packDir(version) {
   return path.join(GAME_DIR, "instances", `pack-${version}`);
 }
 
+// Folder gry dla wpisu z listy wersji: paczka xBobersonx ("pack") albo modpack ("mp:<slug>")
+function instanceDir(version, instance) {
+  return instance && instance.startsWith("mp:") ? mrpack.modpackDir(GAME_DIR, instance.slice(3)) : packDir(version);
+}
+
+const logToConsole = msg => win.webContents.send("game:log", msg);
+
 ipcMain.handle("pack:name", () => packName);
 
-ipcMain.handle("mods:list", (_e, { version }) => listMods(packDir(version)));
-ipcMain.handle("mods:toggle", (_e, { version, tab, key, enabled }) =>
-  setModEnabled(packDir(version), tab, key, enabled));
-ipcMain.handle("mods:search", (_e, { version, query }) => searchMods(packDir(version), version, query));
-ipcMain.handle("mods:install", (_e, { version, id }) =>
-  installOwnMod(packDir(version), version, id, msg => win.webContents.send("game:log", msg)));
+ipcMain.handle("mods:list", (_e, { version, instance }) => listMods(instanceDir(version, instance)));
+ipcMain.handle("mods:toggle", (_e, { version, instance, tab, key, enabled }) =>
+  setModEnabled(instanceDir(version, instance), tab, key, enabled));
+ipcMain.handle("mods:search", (_e, { version, instance, query }) =>
+  searchMods(instanceDir(version, instance), version, query));
+ipcMain.handle("mods:install", (_e, { version, instance, id }) =>
+  installOwnMod(instanceDir(version, instance), version, id, logToConsole));
+ipcMain.handle("mods:check-updates", (_e, { version, instance }) =>
+  checkOwnUpdates(instanceDir(version, instance), version));
+ipcMain.handle("mods:update", (_e, { version, instance, file }) => {
+  if (gameRunning) throw new Error("Zamknij grę, zanim zaktualizujesz mody");
+  return updateOwnMod(instanceDir(version, instance), version, file, logToConsole);
+});
 
 // Shadery i paczki tekstur (type: "shader" | "resourcepack")
-ipcMain.handle("content:list", (_e, { version, type }) => content.listContent(packDir(version), type));
-ipcMain.handle("content:search", (_e, { version, type, query }) =>
-  content.searchContent(packDir(version), version, type, query));
-ipcMain.handle("content:install", (_e, { version, type, id }) =>
-  content.installContent(packDir(version), version, type, id));
-ipcMain.handle("content:toggle", (_e, { version, type, file, enabled }) =>
-  content.setContentEnabled(packDir(version), type, file, enabled));
-ipcMain.handle("content:delete", (_e, { version, type, file }) =>
-  content.deleteContent(packDir(version), type, file));
+ipcMain.handle("content:list", (_e, { version, instance, type }) => content.listContent(instanceDir(version, instance), type));
+ipcMain.handle("content:search", (_e, { version, instance, type, query }) =>
+  content.searchContent(instanceDir(version, instance), version, type, query));
+ipcMain.handle("content:install", (_e, { version, instance, type, id }) =>
+  content.installContent(instanceDir(version, instance), version, type, id));
+ipcMain.handle("content:toggle", (_e, { version, instance, type, file, enabled }) =>
+  content.setContentEnabled(instanceDir(version, instance), type, file, enabled));
+ipcMain.handle("content:delete", (_e, { version, instance, type, file }) =>
+  content.deleteContent(instanceDir(version, instance), type, file));
 
-ipcMain.handle("folder:mods", (_e, { version, loader, preinstalled, content: type } = {}) => {
-  const base = loader === "pack" ? packDir(version) : GAME_DIR;
+// Modpacki z Modrinth
+ipcMain.handle("modpacks:list", () => mrpack.listModpacks(GAME_DIR));
+ipcMain.handle("modpacks:search", (_e, { query }) => mrpack.searchModpacks(GAME_DIR, query));
+ipcMain.handle("modpacks:install", (_e, { id }) =>
+  mrpack.installModpack(GAME_DIR, id, {
+    log: logToConsole,
+    progress: p => win.webContents.send("modpacks:progress", p),
+  }));
+ipcMain.handle("modpacks:delete", async (_e, { slug, title }) => {
+  if (gameRunning) throw new Error("Zamknij grę, zanim usuniesz modpack");
+  const { response } = await dialog.showMessageBox(win, {
+    type: "warning",
+    title: "Usuń modpack",
+    message: `Usunąć modpack ${title}?`,
+    detail: "Razem z nim znikną jego światy, ustawienia i mody. Tego nie da się cofnąć.",
+    buttons: ["Usuń", "Anuluj"],
+    defaultId: 1,
+    cancelId: 1,
+  });
+  if (response !== 0) return false;
+  mrpack.deleteModpack(GAME_DIR, slug);
+  return true;
+});
+
+ipcMain.handle("folder:mods", (_e, { version, instance, preinstalled, content: type } = {}) => {
+  const base = instanceDir(version, instance);
   const folders = { shader: "shaderpacks", resourcepack: "resourcepacks" };
   const dir = type ? path.join(base, folders[type]) : path.join(base, "mods", preinstalled ? "preinstalled" : "");
   fs.mkdirSync(dir, { recursive: true });
@@ -357,12 +405,12 @@ ipcMain.handle("disk:clean", () => {
   ensureGameClosed();
   return disk.cleanJunk(GAME_DIR, UPDATER_CACHE);
 });
-ipcMain.handle("disk:delete-version", async (_e, { version, worlds }) => {
+ipcMain.handle("disk:delete-version", async (_e, { key, label, worlds }) => {
   ensureGameClosed();
   const { response } = await dialog.showMessageBox(win, {
     type: "warning",
     title: "Usuń wersję",
-    message: `Usunąć Minecraft ${version}?`,
+    message: `Usunąć ${label}?`,
     detail: worlds > 0
       ? `Razem z wersją znikną ${worlds} ${worlds === 1 ? "świat" : "światy"}, mody, shadery i ustawienia tej wersji. Tego nie da się cofnąć.`
       : "Znikną mody, shadery i ustawienia tej wersji. Przy następnym uruchomieniu wszystko pobierze się od nowa.",
@@ -371,7 +419,7 @@ ipcMain.handle("disk:delete-version", async (_e, { version, worlds }) => {
     cancelId: 1,
   });
   if (response !== 0) return null;
-  return disk.deleteVersion(GAME_DIR, version);
+  return disk.deleteVersion(GAME_DIR, key);
 });
 ipcMain.handle("disk:open", () => shell.openPath(GAME_DIR));
 
@@ -438,11 +486,12 @@ ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader, win
   // type trafia do --versionType; Minecraft pokazuje go na dole ekranu tytułowego
   // („Minecraft 1.21.11/xBobersonx”) i w F3
   const gameVersion = { number: version, type: "xBobersonx" };
-  if (loader === "fabric" || loader === "pack") {
-    send("game:log", "Instalowanie Fabric...");
-    gameVersion.custom = await installFabric(version);
-    send("game:log", `Fabric: ${gameVersion.custom}`);
-  }
+  // loader: "pack" = paczka xBobersonx Mods, "mp:<slug>" = modpack z Modrinth
+  const modpack = loader.startsWith("mp:") ? mrpack.readModpack(GAME_DIR, loader.slice(3)) : null;
+  const gameDir = instanceDir(version, loader);
+  send("game:log", "Instalowanie Fabric...");
+  gameVersion.custom = await installFabric(version, modpack && modpack.fabricLoader);
+  send("game:log", `Fabric: ${gameVersion.custom}`);
   const javaPath = await getJava(version, {
     runtimeRoot: path.join(GAME_DIR, "runtime"),
     manifestUrl: MANIFEST_URL,
@@ -459,14 +508,16 @@ ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader, win
     });
     // Fabric nie czyta podfolderów mods/, więc wskazujemy mu preinstalled/ wprost
     jvmArgs.push(`-Dfabric.addMods=${preinstalled}`);
+  }
 
-    // wspólne ustawienia dla wszystkich wersji (sterowanie, myszka, dźwięk, grafika)
-    if (syncOptions) {
-      const seededFrom = gameOptions.seed(GAME_DIR, SHARED_OPTIONS);
-      if (seededFrom) send("game:log", `[ustawienia] Wspólne ustawienia utworzone z ${seededFrom}`);
-      if (gameOptions.push(packDir(version), SHARED_OPTIONS)) send("game:log", "[ustawienia] Wgrano wspólne ustawienia");
-    }
+  // wspólne ustawienia dla wszystkich wersji (sterowanie, myszka, dźwięk, grafika)
+  if (syncOptions) {
+    const seededFrom = gameOptions.seed(GAME_DIR, SHARED_OPTIONS);
+    if (seededFrom) send("game:log", `[ustawienia] Wspólne ustawienia utworzone z ${seededFrom}`);
+    if (gameOptions.push(gameDir, SHARED_OPTIONS)) send("game:log", "[ustawienia] Wgrano wspólne ustawienia");
+  }
 
+  if (loader === "pack") {
     // domyślne ustawienia tylko dla wersji, w której gra jeszcze ich nie zapisała
     // (options.txt mógł powstać wcześniej z samą listą paczek tekstur)
     const options = path.join(packDir(version), "options.txt");
@@ -497,13 +548,12 @@ ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader, win
   });
   launcher.on("close", code => {
     gameRunning = false;
-    if (syncOptions && loader === "pack") gameOptions.pull(packDir(version), SHARED_OPTIONS);
+    if (syncOptions) gameOptions.pull(gameDir, SHARED_OPTIONS);
     showFromTray();
     send("game:closed", code);
-    const instanceDir = loader === "pack" ? packDir(version) : GAME_DIR;
-    const report = findCrashReport(instanceDir, startedAt);
+    const report = findCrashReport(gameDir, startedAt);
     if (code !== 0 || report) {
-      send("game:crash", describeCrash(instanceDir, version, logTail.join("\n"), code, report));
+      send("game:crash", { ...describeCrash(gameDir, version, logTail.join("\n"), code, report), instance: loader });
     }
   });
 
@@ -515,7 +565,7 @@ ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader, win
     version: gameVersion,
     memory: { max: `${ram}G`, min: `${Math.min(2, ram)}G` },
     javaPath,
-    overrides: loader === "pack" ? { gameDirectory: packDir(version) } : {},
+    overrides: { gameDirectory: gameDir },
     customArgs: jvmArgs,
     window: gameWindow && gameWindow.fullscreen
       ? { fullscreen: true }

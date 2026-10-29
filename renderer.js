@@ -31,11 +31,17 @@ function persist() {
   window.api.saveSettings(settings);
 }
 
-// Tylko wbudowana paczka modów, dla każdej wersji obsługiwanej przez Fabric
+// Najpierw zainstalowane modpacki, potem paczka xBobersonx dla każdej wersji obsługiwanej przez Fabric.
 // onlyInstalled: bez internetu pokazujemy tylko wersje, które już są pobrane
-function fillVersions(versions, fabricVersions, packName, onlyInstalled) {
+function fillVersions(versions, fabricVersions, packName, onlyInstalled, modpacks = []) {
   const select = $("version");
   select.innerHTML = "";
+  for (const mp of modpacks) {
+    const opt = document.createElement("option");
+    opt.value = `${mp.gameVersion}|mp:${mp.slug}`;
+    opt.textContent = `📦 ${mp.title} (${mp.gameVersion})`;
+    select.appendChild(opt);
+  }
   for (const v of versions) {
     if (v.type !== "release" || !fabricVersions.has(v.id)) continue;
     if (onlyInstalled && !onlyInstalled.includes(v.id)) continue;
@@ -130,15 +136,24 @@ async function init() {
     if (account) setAccount(account.name, account.skin, account.offline);
   });
 
+  await loadVersions();
+}
+
+// Lista wersji (też po instalacji/usunięciu modpacka); select = wpis do zaznaczenia
+async function loadVersions(select) {
   try {
-    const [{ versions, offline, installed }, fabric, packName] = await Promise.all([
+    const [{ versions, offline, installed, modpacks }, fabric, packName] = await Promise.all([
       window.api.listVersions(),
       window.api.fabricVersions().catch(() => []),
       window.api.packName(),
     ]);
-    fillVersions(versions, new Set(fabric), packName, offline ? installed : null);
+    fillVersions(versions, new Set(fabric), packName, offline ? installed : null, modpacks);
+    if (select) {
+      $("version").value = select;
+      persist();
+    }
     if (offline) {
-      setStatus(installed.length
+      setStatus(installed.length || modpacks.length
         ? "Brak internetu — tryb offline: grasz na pobranych wersjach"
         : "Brak internetu — żadna wersja nie jest jeszcze pobrana");
     }
@@ -244,11 +259,18 @@ function modsVersion() {
   return $("version").value.split("|")[0];
 }
 
+// Wybrany wpis z listy: wersja gry + instancja ("pack" albo "mp:<slug>")
+function modsTarget() {
+  const [version, instance] = $("version").value.split("|");
+  return { version, instance };
+}
+
 async function loadMods() {
-  modsData = await window.api.listMods(modsVersion());
+  modsData = await window.api.listMods(modsTarget());
   $("count-own").textContent = `(${modsData.own.length})`;
   $("count-pre").textContent = `(${modsData.pre.length})`;
   renderMods();
+  showUpdateButton();
 }
 
 function renderMods() {
@@ -288,15 +310,42 @@ function renderMods() {
       tag.textContent = "biblioteka";
       li.appendChild(tag);
     }
+    // własny mod, który i tak jest w paczce — można go usunąć z folderu
+    if (modsTab === "own" && mod.modId && modsData.pre.some(p => p.modId === mod.modId)) {
+      const tag = document.createElement("span");
+      tag.className = "mod-tag";
+      tag.textContent = "jest też w paczce";
+      tag.title = "Ten mod jest już w paczce xBobersonx Mods — kopia we własnych modach nie jest potrzebna";
+      li.appendChild(tag);
+    }
+    const update = modsTab === "own" && modUpdates.get(mod.key);
     const version = document.createElement("span");
     version.className = "mod-version";
-    version.textContent = mod.version;
+    version.textContent = update ? `${update.from} → ${update.to}` : mod.version;
+    if (update) {
+      version.classList.add("has-update");
+      version.title = update.changelog || "";
+    }
     li.appendChild(version);
+
+    if (update) {
+      const btn = document.createElement("button");
+      btn.className = "small primary";
+      btn.textContent = "Aktualizuj";
+      btn.onclick = async e => {
+        e.stopPropagation();
+        btn.disabled = true;
+        btn.textContent = "…";
+        await updateOneMod(update);
+        await loadMods();
+      };
+      li.appendChild(btn);
+    }
 
     const toggle = async () => {
       const enabled = !mod.enabled;
       try {
-        await window.api.toggleMod({ version: modsVersion(), tab: modsTab, key: mod.key, enabled });
+        await window.api.toggleMod({ ...modsTarget(), tab: modsTab, key: mod.key, enabled });
         mod.enabled = enabled;
         $("mods-hint").textContent = mod.library && !enabled
           ? "Uwaga: inne mody mogą wymagać tej biblioteki — gra może się nie uruchomić."
@@ -306,11 +355,58 @@ function renderMods() {
       }
       renderMods();
     };
-    li.onclick = e => { if (e.target !== box) toggle(); };
+    li.onclick = e => { if (e.target !== box && e.target.tagName !== "BUTTON") toggle(); };
     box.onchange = toggle;
     list.appendChild(li);
   }
 }
+
+// ---------- Aktualizacje własnych modów ----------
+let modUpdates = new Map(); // plik -> { file, from, to, changelog }
+
+async function updateOneMod(update) {
+  try {
+    await window.api.updateMod({ ...modsTarget(), file: update.file });
+    modUpdates.delete(update.file);
+    $("mods-hint").textContent = `Zaktualizowano do ${update.to}`;
+    return true;
+  } catch (err) {
+    $("mods-hint").textContent = cleanError(err);
+    return false;
+  }
+}
+
+function showUpdateButton() {
+  const btn = $("btn-mods-updates");
+  btn.hidden = modsTab !== "own" || modsData.own.length === 0;
+  btn.disabled = false;
+  btn.textContent = modUpdates.size ? `Aktualizuj wszystkie (${modUpdates.size})` : "Sprawdź aktualizacje";
+}
+
+$("btn-mods-updates").onclick = async () => {
+  const btn = $("btn-mods-updates");
+  btn.disabled = true;
+  if (modUpdates.size) {
+    btn.textContent = "Aktualizowanie…";
+    let done = 0;
+    for (const update of [...modUpdates.values()]) if (await updateOneMod(update)) done++;
+    $("mods-hint").textContent = `Zaktualizowano ${done} ${done === 1 ? "mod" : "modów"}`;
+    await loadMods();
+  } else {
+    btn.textContent = "Sprawdzanie…";
+    try {
+      const updates = await window.api.checkModUpdates(modsTarget());
+      modUpdates = new Map(updates.map(u => [u.file, u]));
+      $("mods-hint").textContent = updates.length
+        ? `Aktualizacje dostępne dla ${updates.length} ${updates.length === 1 ? "moda" : "modów"}`
+        : "Wszystkie własne mody są aktualne (sprawdzono te, które są na Modrinth)";
+      renderMods();
+    } catch (err) {
+      $("mods-hint").textContent = "Nie udało się sprawdzić — sprawdź internet";
+    }
+  }
+  showUpdateButton();
+};
 
 // ---------- Zakładka „Szukaj modów” (Modrinth) ----------
 let searchResults = null; // null = trwa wyszukiwanie
@@ -338,8 +434,8 @@ async function doSearch() {
   try {
     const query = $("mods-search").value.trim();
     const results = isContentTab(tab)
-      ? await window.api.searchContent({ version: modsVersion(), type: tab, query })
-      : await window.api.searchMods({ version: modsVersion(), query });
+      ? await window.api.searchContent({ ...modsTarget(), type: tab, query })
+      : await window.api.searchMods({ ...modsTarget(), query });
     if (seq !== searchSeq) return;
     searchResults = results;
   } catch (err) {
@@ -364,7 +460,7 @@ function renderSearch() {
 }
 
 async function installModResult(mod) {
-  const files = await window.api.installMod({ version: modsVersion(), id: mod.id });
+  const files = await window.api.installMod({ ...modsTarget(), id: mod.id });
   await loadMods();
   return files.length > 1
     ? `Zainstalowano ${mod.title} + ${files.length - 1} wymaganych bibliotek`
@@ -375,7 +471,7 @@ async function installModResult(mod) {
 
 async function loadContent() {
   if (!isContentTab(modsTab)) return;
-  contentInstalled = await window.api.listContent({ version: modsVersion(), type: modsTab });
+  contentInstalled = await window.api.listContent({ ...modsTarget(), type: modsTab });
   renderMods();
 }
 
@@ -400,7 +496,7 @@ function contentRow(item, type) {
 
   const set = async enabled => {
     try {
-      await window.api.toggleContent({ version: modsVersion(), type, file: item.file, enabled });
+      await window.api.toggleContent({ ...modsTarget(), type, file: item.file, enabled });
       $("mods-hint").textContent = "";
     } catch (err) {
       $("mods-hint").textContent = cleanError(err);
@@ -417,7 +513,7 @@ function contentRow(item, type) {
     del.className = "small";
     del.textContent = "Usuń";
     del.onclick = async () => {
-      await window.api.deleteContent({ version: modsVersion(), type, file: item.file });
+      await window.api.deleteContent({ ...modsTarget(), type, file: item.file });
       await loadContent();
       if (searchResults) doSearch();
     };
@@ -435,7 +531,7 @@ function renderContent() {
   if (type === "shader") {
     const none = contentRow({ title: "Bez shaderów", enabled: !contentInstalled.some(i => i.enabled) }, type);
     none.onclick = async () => {
-      await window.api.toggleContent({ version: modsVersion(), type, file: null, enabled: false });
+      await window.api.toggleContent({ ...modsTarget(), type, file: null, enabled: false });
       await loadContent();
     };
     list.appendChild(none);
@@ -459,7 +555,7 @@ function renderContent() {
   }
   for (const item of searchResults) {
     list.appendChild(resultItem(item, async () => {
-      await window.api.installContent({ version: modsVersion(), type, id: item.id });
+      await window.api.installContent({ ...modsTarget(), type, id: item.id });
       await loadContent();
       return type === "shader"
         ? `Zainstalowano i włączono shader ${item.title}`
@@ -469,7 +565,7 @@ function renderContent() {
 }
 
 // Wiersz wyniku wyszukiwania z przyciskiem „Zainstaluj”; install() zwraca tekst podpowiedzi
-function resultItem(mod, install) {
+function resultItem(mod, install, hintId = "mods-hint") {
   {
     const li = document.createElement("li");
     li.className = "result";
@@ -507,11 +603,11 @@ function resultItem(mod, install) {
         mod.installed = true;
         button.textContent = "Zainstalowany";
         button.classList.remove("primary");
-        $("mods-hint").textContent = hint;
+        $(hintId).textContent = hint;
       } catch (err) {
         button.disabled = false;
         button.textContent = "Zainstaluj";
-        $("mods-hint").textContent = cleanError(err);
+        $(hintId).textContent = cleanError(err);
       }
     };
 
@@ -527,6 +623,7 @@ function setModsTab(tab) {
   $("mods-search").value = "";
   $("mods-search").placeholder = tab === "search" || isContentTab(tab) ? "Szukaj na Modrinth…" : "Szukaj…";
   $("btn-mods-folder").hidden = tab === "search";
+  showUpdateButton();
   $("mods-list").scrollTop = 0;
   if (isContentTab(tab)) {
     contentInstalled = [];
@@ -541,6 +638,9 @@ $("btn-mods").onclick = async () => {
   if (!option || !option.value.includes("|")) return;
   $("mods-title").textContent = `Mody — ${option.textContent}`;
   $("mods-search").value = "";
+  modUpdates = new Map();
+  // modpack nie ma paczki xBobersonx — jego mody są w zakładce „Własne mody”
+  document.querySelector('.tab[data-tab="pre"]').hidden = modsTarget().instance !== "pack";
   setModsTab("own");
   $("mods").hidden = false;
   await loadMods();
@@ -553,7 +653,7 @@ $("mods-search").oninput = () => {
 };
 $("btn-close-mods").onclick = () => { $("mods").hidden = true; };
 $("btn-mods-folder").onclick = () =>
-  window.api.openMods({ version: modsVersion(), loader: "pack", preinstalled: modsTab === "pre", content: isContentTab(modsTab) ? modsTab : null });
+  window.api.openMods({ ...modsTarget(), preinstalled: modsTab === "pre", content: isContentTab(modsTab) ? modsTab : null });
 window.addEventListener("focus", () => {
   if ($("mods").hidden) return;
   loadMods();
@@ -677,7 +777,7 @@ window.api.on("game:crash", crash => {
     button.disabled = !mod.enabled;
     button.onclick = async () => {
       try {
-        await window.api.toggleMod({ version: crash.version, tab: mod.tab, key: mod.key, enabled: false });
+        await window.api.toggleMod({ version: crash.version, instance: crash.instance, tab: mod.tab, key: mod.key, enabled: false });
         li.classList.add("off");
         button.textContent = "Wyłączony";
         button.disabled = true;
@@ -760,15 +860,16 @@ async function loadDisk() {
     del.textContent = "Usuń";
     del.onclick = async () => {
       try {
-        const freed = await window.api.diskDeleteVersion({ version: v.version, worlds: v.worlds });
+        const freed = await window.api.diskDeleteVersion({ key: v.key, label: v.label, worlds: v.worlds });
         if (freed === null) return;
-        $("disk-hint").textContent = `Usunięto Minecraft ${v.version} — zwolniono ${niceSize(freed)}`;
+        $("disk-hint").textContent = `Usunięto ${v.label} — zwolniono ${niceSize(freed)}`;
         loadDisk();
+        loadVersions();
       } catch (err) {
         $("disk-hint").textContent = cleanError(err);
       }
     };
-    list.appendChild(diskRow(`Minecraft ${v.version}`, detail, v.size, max, del));
+    list.appendChild(diskRow(v.label, detail, v.size, max, del));
   }
 
   list.appendChild(diskSection("Pliki wspólne"));
@@ -796,6 +897,137 @@ $("btn-disk-clean").onclick = async () => {
   } catch (err) {
     $("disk-hint").textContent = cleanError(err);
   }
+};
+
+// ---------- Okno „Modpacki” ----------
+let modpacksInstalled = [];
+let modpackResults = null; // null = trwa wyszukiwanie
+let modpacksTimer = null;
+let modpacksSeq = 0;
+let modpackInstalling = false;
+
+function modpackRow(mp) {
+  const li = document.createElement("li");
+  li.className = "result";
+  const icon = document.createElement("img");
+  icon.className = "result-icon";
+  if (mp.icon) icon.src = mp.icon;
+  icon.alt = "";
+  const body = document.createElement("div");
+  body.className = "result-body";
+  const title = document.createElement("div");
+  title.className = "result-title";
+  title.textContent = mp.title;
+  const meta = document.createElement("div");
+  meta.className = "result-meta";
+  meta.textContent = `Minecraft ${mp.gameVersion} · wersja ${mp.version}`;
+  body.append(title, meta);
+
+  const buttons = document.createElement("div");
+  buttons.className = "result-buttons";
+  const play = document.createElement("button");
+  play.className = "primary";
+  play.textContent = "Wybierz";
+  play.onclick = async () => {
+    await loadVersions(`${mp.gameVersion}|mp:${mp.slug}`);
+    $("modpacks").hidden = true;
+    setStatus(`Wybrano ${mp.title} — kliknij „Uruchom grę”`);
+  };
+  const del = document.createElement("button");
+  del.textContent = "Usuń";
+  del.onclick = async () => {
+    try {
+      if (!(await window.api.deleteModpack({ slug: mp.slug, title: mp.title }))) return;
+      $("modpacks-hint").textContent = `Usunięto ${mp.title}`;
+      await loadVersions();
+      await loadModpacks();
+    } catch (err) {
+      $("modpacks-hint").textContent = cleanError(err);
+    }
+  };
+  buttons.append(play, del);
+  li.append(icon, body, buttons);
+  return li;
+}
+
+function renderModpacks() {
+  const list = $("modpacks-list");
+  list.innerHTML = "";
+  list.appendChild(section(`Zainstalowane (${modpacksInstalled.length})`));
+  if (modpacksInstalled.length === 0) {
+    const li = document.createElement("li");
+    li.className = "section";
+    li.style.fontWeight = "normal";
+    li.textContent = "Nic jeszcze nie zainstalowano — wybierz modpack poniżej";
+    list.appendChild(li);
+  }
+  for (const mp of modpacksInstalled) list.appendChild(modpackRow(mp));
+
+  list.appendChild(section("Modpacki do pobrania (Modrinth, Fabric)"));
+  if (!modpackResults || modpackResults.length === 0) {
+    const li = document.createElement("li");
+    li.className = "section";
+    li.style.fontWeight = "normal";
+    li.textContent = !modpackResults ? "Szukanie…" : "Nic nie znaleziono";
+    list.appendChild(li);
+    return;
+  }
+  for (const mp of modpackResults) {
+    list.appendChild(resultItem(mp, async () => {
+      if (modpackInstalling) throw new Error("Poczekaj, aż skończy się instalacja poprzedniego modpacka");
+      modpackInstalling = true;
+      $("modpacks-progress").hidden = false;
+      $("modpacks-bar").style.width = "0%";
+      try {
+        const info = await window.api.installModpack({ id: mp.id });
+        await loadVersions(`${info.gameVersion}|mp:${info.slug}`);
+        await loadModpacks();
+        return `Zainstalowano ${info.title} (Minecraft ${info.gameVersion}) — wybrany na liście wersji, kliknij „Uruchom grę”`;
+      } finally {
+        modpackInstalling = false;
+        $("modpacks-progress").hidden = true;
+      }
+    }, "modpacks-hint"));
+  }
+}
+
+async function loadModpacks() {
+  modpacksInstalled = await window.api.listModpacks();
+  renderModpacks();
+}
+
+async function searchModpacks() {
+  const seq = ++modpacksSeq;
+  modpackResults = null;
+  renderModpacks();
+  try {
+    const results = await window.api.searchModpacks({ query: $("modpacks-search").value.trim() });
+    if (seq === modpacksSeq) modpackResults = results;
+  } catch {
+    if (seq === modpacksSeq) modpackResults = [];
+    $("modpacks-hint").textContent = "Nie udało się połączyć z Modrinth — sprawdź internet";
+  }
+  renderModpacks();
+}
+
+window.api.on("modpacks:progress", p => {
+  const percent = p.total ? Math.round((p.task / p.total) * 100) : 0;
+  $("modpacks-bar").style.width = `${percent}%`;
+  $("modpacks-hint").textContent = `Pobieranie plików modpacka: ${p.task}/${p.total}`;
+});
+
+$("btn-modpacks").onclick = () => {
+  $("modpacks-hint").textContent = "";
+  $("modpacks-search").value = "";
+  $("modpacks-list").scrollTop = 0;
+  $("modpacks").hidden = false;
+  loadModpacks();
+  searchModpacks();
+};
+$("btn-close-modpacks").onclick = () => { $("modpacks").hidden = true; };
+$("modpacks-search").oninput = () => {
+  clearTimeout(modpacksTimer);
+  modpacksTimer = setTimeout(searchModpacks, 400);
 };
 
 // ---------- Własne tło ----------

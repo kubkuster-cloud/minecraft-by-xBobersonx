@@ -313,7 +313,7 @@ button.primary:not(:disabled):hover {
 }
 .tab .count { font-weight: normal; color: #666; }
 
-#mods-list {
+:is(#mods-list, #modpacks-list) {
   list-style: none;
   padding: 0;
   height: 300px;
@@ -323,7 +323,7 @@ button.primary:not(:disabled):hover {
   border-radius: 0 3px 3px 3px;
   color: #000;
 }
-#mods-list li {
+:is(#mods-list, #modpacks-list) li {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -331,11 +331,11 @@ button.primary:not(:disabled):hover {
   border-bottom: 1px solid #eef0f3;
   cursor: pointer;
 }
-#mods-list li:nth-child(even) { background: #f7f9fb; }
-#mods-list li:hover { background: #e5f3fb; }
-#mods-list li.off .mod-title { color: #999; text-decoration: line-through; }
-#mods-list li.empty { justify-content: center; color: #777; cursor: default; height: 100%; border: 0; background: none; }
-#mods-list input[type=checkbox] {
+:is(#mods-list, #modpacks-list) li:nth-child(even) { background: #f7f9fb; }
+:is(#mods-list, #modpacks-list) li:hover { background: #e5f3fb; }
+:is(#mods-list, #modpacks-list) li.off .mod-title { color: #999; text-decoration: line-through; }
+:is(#mods-list, #modpacks-list) li.empty { justify-content: center; color: #777; cursor: default; height: 100%; border: 0; background: none; }
+:is(#mods-list, #modpacks-list) input[type=checkbox] {
   flex: 0 0 auto;
   width: 15px;
   height: 15px;
@@ -353,8 +353,8 @@ button.primary:not(:disabled):hover {
   color: #5a6675;
 }
 /* wyniki wyszukiwania modów */
-#mods-list li.result { cursor: default; gap: 12px; padding: 8px 10px; }
-#mods-list li.result:hover { background: #f2f8fc; }
+:is(#mods-list, #modpacks-list) li.result { cursor: default; gap: 12px; padding: 8px 10px; }
+:is(#mods-list, #modpacks-list) li.result:hover { background: #f2f8fc; }
 .result-icon {
   width: 40px;
   height: 40px;
@@ -375,10 +375,10 @@ button.primary:not(:disabled):hover {
   overflow: hidden;
 }
 .result-meta { color: #999; font-size: 10px; margin-top: 2px; }
-#mods-list li.result button { flex-shrink: 0; height: 26px; padding: 0 12px; }
+:is(#mods-list, #modpacks-list) li.result button { flex-shrink: 0; height: 26px; padding: 0 12px; }
 
 /* shadery i tekstury: nagłówki sekcji i zainstalowane elementy */
-#mods-list li.section {
+:is(#mods-list, #modpacks-list) li.section {
   cursor: default;
   padding: 4px 10px;
   font-size: 11px;
@@ -387,8 +387,8 @@ button.primary:not(:disabled):hover {
   background: linear-gradient(#eef2f6, #e2e8ee);
   border-bottom: 1px solid #cdd5de;
 }
-#mods-list li.section:hover { background: linear-gradient(#eef2f6, #e2e8ee); }
-#mods-list input[type=radio] {
+:is(#mods-list, #modpacks-list) li.section:hover { background: linear-gradient(#eef2f6, #e2e8ee); }
+:is(#mods-list, #modpacks-list) input[type=radio] {
   flex: 0 0 auto;
   width: 15px;
   height: 15px;
@@ -396,8 +396,8 @@ button.primary:not(:disabled):hover {
   accent-color: #4caf2a;
   cursor: pointer;
 }
-#mods-list li.on .mod-title { font-weight: 600; color: #2f7d1f; }
-#mods-list li button.small { height: 22px; padding: 0 8px; font-size: 11px; }
+:is(#mods-list, #modpacks-list) li.on .mod-title { font-weight: 600; color: #2f7d1f; }
+:is(#mods-list, #modpacks-list) li button.small { height: 22px; padding: 0 8px; font-size: 11px; }
 
 /* ---------- Ustawienia z zakładkami ---------- */
 .settings-dialog { width: 660px; }
@@ -597,6 +597,16 @@ button.primary:not(:disabled):hover {
   text-shadow: 0 1px 2px #000;
   animation: drop-in 0.3s ease-out;
 }
+
+.mods-updates { margin-right: auto; }
+
+/* okno modpacków */
+#modpacks-list { border-radius: 3px; height: 320px; margin-top: 6px; }
+#modpacks .mods-toolbar .note { font-size: 11px; color: #d8dde3; text-shadow: 0 1px 2px #000; }
+#modpacks-bar { height: 100%; width: 0; background: linear-gradient(#a8ee8c, #4fc72a 50%, #36b10e 51%, #5ad132); transition: width 0.2s; }
+#modpacks-hint { margin-top: 6px; min-height: 15px; font-size: 11px; color: #f0f0f0; text-shadow: 0 1px 2px #000; }
+.result-buttons { display: flex; gap: 4px; flex-shrink: 0; }
+.mod-version.has-update { color: #2f7d1f; font-weight: 600; }
 
 #mods-hint { margin-top: 6px; min-height: 15px; font-size: 11px; color: #f0f0f0; text-shadow: 0 1px 2px #000; }
 
