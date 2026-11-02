@@ -100,7 +100,10 @@ function drawHead(skinUrl) {
   img.src = skinUrl;
 }
 
+let premiumAccount = false;
+
 function setAccount(name, skin, offline) {
+  premiumAccount = !!name;
   drawHead(name ? skin : null);
   $("account-name").textContent = name || $("nick").value.trim() || "—";
   $("account").textContent = name ? `Konto Microsoft${offline ? " (offline)" : ""}` : "Konto non-premium";
@@ -691,18 +694,19 @@ $("btn-logout").onclick = async () => {
   $("nick").value = settings.nick || "";
 };
 
-$("btn-play").onclick = async () => {
+// server = adres serwera, na który gra wchodzi od razu po starcie
+async function startGame(server) {
   const nick = $("nick").value.trim();
   if (!/^[A-Za-z0-9_]{3,16}$/.test(nick)) {
     setStatus("Nick: 3–16 znaków, litery, cyfry lub _");
     return;
   }
   const [version, loader] = $("version").value.split("|");
-  if (!loader) return;
+  if (!loader || $("btn-play").disabled) return;
 
   persist();
   setPlaying(true);
-  setStatus("Przygotowywanie…", 0);
+  setStatus(server ? `Przygotowywanie… (potem wejście na ${server})` : "Przygotowywanie…", 0);
   try {
     await window.api.launch({
       nick,
@@ -714,13 +718,16 @@ $("btn-play").onclick = async () => {
       afterLaunch: settings.afterLaunch || "tray",
       javaArgs: settings.javaArgs || "",
       syncOptions: settings.syncOptions !== false,
+      server,
     });
   } catch (err) {
     setStatus("Błąd uruchamiania — szczegóły w ustawieniach (⚙)");
     log(String(err));
     setPlaying(false);
   }
-};
+}
+
+$("btn-play").onclick = () => startGame();
 
 function setPlaying(on) {
   $("btn-play").disabled = on;
@@ -1028,6 +1035,151 @@ $("btn-close-modpacks").onclick = () => { $("modpacks").hidden = true; };
 $("modpacks-search").oninput = () => {
   clearTimeout(modpacksTimer);
   modpacksTimer = setTimeout(searchModpacks, 400);
+};
+
+// ---------- Serwery ----------
+
+const serverInfo = new Map(); // adres → wynik pingu albo { error }
+
+const savedServers = () => settings.servers || (settings.servers = []);
+
+function saveServers() {
+  window.api.saveSettings(settings);
+}
+
+function serverRow(srv, index) {
+  const info = serverInfo.get(srv.address);
+  const li = document.createElement("li");
+  li.className = "result";
+  const icon = document.createElement("img");
+  icon.className = "result-icon";
+  icon.src = info && info.favicon ? info.favicon : "assets/icon.png";
+  icon.alt = "";
+  const body = document.createElement("div");
+  body.className = "result-body";
+
+  const title = document.createElement("div");
+  title.className = "result-title";
+  title.textContent = `${srv.name} `;
+  const addr = document.createElement("small");
+  addr.textContent = srv.address;
+  title.appendChild(addr);
+  if (info && !info.error) {
+    const tag = document.createElement("span");
+    const kind = info.premium || "unknown";
+    tag.className = `server-tag ${kind}`;
+    tag.textContent = { cracked: "non-premium ✓", premium: "tylko premium", unknown: "premium?" }[kind];
+    tag.title = {
+      cracked: "Serwer wpuszcza graczy bez konta Microsoft",
+      premium: "Serwer wymaga konta Microsoft z kupionym Minecraftem",
+      unknown: "Nie udało się sprawdzić, czy serwer wpuszcza graczy non-premium",
+    }[kind];
+    title.appendChild(tag);
+  }
+
+  const desc = document.createElement("div");
+  desc.className = "result-desc motd";
+  const meta = document.createElement("div");
+  meta.className = "result-meta";
+  const dot = document.createElement("span");
+  dot.className = "server-dot";
+  if (!info) {
+    desc.textContent = "Sprawdzanie…";
+  } else if (info.error) {
+    dot.classList.add("off");
+    desc.textContent = info.error;
+  } else {
+    dot.classList.add("on");
+    desc.textContent = info.motd || "";
+    const parts = [];
+    if (info.players != null) parts.push(`${info.players}/${info.max} graczy`);
+    parts.push(`${info.ping} ms`);
+    if (info.version) parts.push(info.version);
+    meta.textContent = parts.join(" · ");
+  }
+  meta.prepend(dot);
+  body.append(title, desc, meta);
+
+  const buttons = document.createElement("div");
+  buttons.className = "result-buttons";
+  const play = document.createElement("button");
+  play.className = "primary";
+  play.textContent = "Graj";
+  play.disabled = $("btn-play").disabled;
+  play.onclick = () => joinServer(srv, info);
+  const del = document.createElement("button");
+  del.textContent = "✕";
+  del.title = "Usuń z listy";
+  del.onclick = () => {
+    savedServers().splice(index, 1);
+    saveServers();
+    renderServers();
+  };
+  buttons.append(play, del);
+  li.append(icon, body, buttons);
+  return li;
+}
+
+function renderServers() {
+  const list = $("servers-list");
+  list.innerHTML = "";
+  const all = savedServers();
+  if (all.length === 0) {
+    const li = document.createElement("li");
+    li.className = "empty";
+    li.textContent = "Dodaj serwer: wpisz nazwę i adres na górze";
+    list.appendChild(li);
+    return;
+  }
+  all.forEach((srv, i) => list.appendChild(serverRow(srv, i)));
+}
+
+async function pingServer(address) {
+  serverInfo.delete(address);
+  renderServers();
+  try {
+    serverInfo.set(address, await window.api.pingServer(address));
+  } catch (err) {
+    serverInfo.set(address, { error: cleanError(err) });
+  }
+  renderServers();
+}
+
+const pingAll = () => savedServers().forEach(srv => pingServer(srv.address));
+
+function joinServer(srv, info) {
+  if (info && info.premium === "premium" && !premiumAccount) {
+    $("servers-hint").textContent = `${srv.name} wpuszcza tylko konta premium — zaloguj się przez Microsoft w ⚙ → Konto`;
+    return;
+  }
+  $("servers").hidden = true;
+  startGame(srv.address);
+}
+
+$("btn-servers").onclick = () => {
+  $("servers-hint").textContent = "Gra uruchomi się na wersji wybranej w launcherze i od razu wejdzie na serwer.";
+  $("servers").hidden = false;
+  pingAll();
+};
+$("btn-close-servers").onclick = () => { $("servers").hidden = true; };
+$("btn-servers-refresh").onclick = pingAll;
+$("servers-add").onsubmit = e => {
+  e.preventDefault();
+  const address = $("server-address").value.trim().replace(/^minecraft:\/\//i, "").replace(/\/+$/, "");
+  if (!/^[\w.\-\[\]:]+$/.test(address)) {
+    $("servers-hint").textContent = "Wpisz adres serwera, np. mc.serwer.pl albo 123.45.67.89:25565";
+    return;
+  }
+  if (savedServers().some(srv => srv.address.toLowerCase() === address.toLowerCase())) {
+    $("servers-hint").textContent = "Ten serwer już jest na liście";
+    return;
+  }
+  savedServers().push({ name: $("server-name").value.trim() || address, address });
+  saveServers();
+  $("server-name").value = "";
+  $("server-address").value = "";
+  $("servers-hint").textContent = "";
+  pingServer(address);
 };
 
 // ---------- Własne tło ----------

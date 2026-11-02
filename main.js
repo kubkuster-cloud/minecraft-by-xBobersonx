@@ -14,6 +14,7 @@ const content = require("./content");
 const { analyze, findCrashReport } = require("./crash");
 const disk = require("./disk");
 const gameOptions = require("./options");
+const servers = require("./servers");
 
 const ICON = path.join(__dirname, "assets", "icon.png");
 
@@ -479,7 +480,39 @@ function splitArgs(text) {
   return (text.match(/"[^"]*"|\S+/g) || []).map(a => a.replace(/^"|"$/g, ""));
 }
 
-ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader, window: gameWindow, afterLaunch, javaArgs, syncOptions }) => {
+// ---------- Serwery ----------
+
+// wynik „premium / non-premium” zapamiętujemy na dobę, żeby nie logować się na serwer przy każdym otwarciu okna
+const PREMIUM_CACHE = path.join(GAME_DIR, "cache", "launcher", "servers-premium.json");
+const PREMIUM_TTL = 24 * 3600 * 1000;
+
+ipcMain.handle("servers:ping", async (_e, address) => {
+  const info = await servers.ping(address);
+  const key = `${info.host}:${info.port}`;
+  let cache = {};
+  try { cache = JSON.parse(fs.readFileSync(PREMIUM_CACHE, "utf8")); } catch {}
+  const hit = cache[key];
+  if (hit && Date.now() - hit.at < PREMIUM_TTL) {
+    info.premium = hit.premium;
+  } else {
+    info.premium = await servers.checkPremium(info.host, info.port, info.protocol);
+    if (info.premium) {
+      cache[key] = { premium: info.premium, at: Date.now() };
+      fs.mkdirSync(path.dirname(PREMIUM_CACHE), { recursive: true });
+      fs.writeFileSync(PREMIUM_CACHE, JSON.stringify(cache));
+    }
+  }
+  return info;
+});
+
+// Minecraft 1.20+ ma --quickPlayMultiplayer, starsze wersje --server/--port
+function quickPlay(version, address) {
+  const [major, minor] = version.split(".").map(Number);
+  const legacy = major === 1 && minor < 20;
+  return { type: legacy ? "legacy" : "multiplayer", identifier: address };
+}
+
+ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader, window: gameWindow, afterLaunch, javaArgs, syncOptions, server }) => {
   const launcher = new Client();
   const send = (ch, data) => win && !win.isDestroyed() && win.webContents.send(ch, data);
 
@@ -567,6 +600,7 @@ ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader, win
     javaPath,
     overrides: { gameDirectory: gameDir },
     customArgs: jvmArgs,
+    quickPlay: server ? quickPlay(version, server) : undefined,
     window: gameWindow && gameWindow.fullscreen
       ? { fullscreen: true }
       : { width: (gameWindow && gameWindow.width) || 1280, height: (gameWindow && gameWindow.height) || 720 },

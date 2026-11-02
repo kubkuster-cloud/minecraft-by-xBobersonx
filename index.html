@@ -35,6 +35,7 @@
     </div>
 
     <div class="buttons">
+      <button id="btn-servers" title="Serwery">🌐</button>
       <button id="btn-modpacks" title="Gotowe modpacki z Modrinth">📦</button>
       <button id="btn-mods">
         <svg viewBox="0 0 16 16"><path d="M14.7 4.1l-2.3 2.3-2-.5-.5-2 2.3-2.3A4 4 0 0 0 7 6.7L1.6 12a1.4 1.4 0 0 0 2 2l5.4-5.4a4 4 0 0 0 5.7-4.5z" fill="#6b7a8c"/></svg>
@@ -263,6 +264,23 @@
       <ul id="modpacks-list"></ul>
       <div class="progress" id="modpacks-progress" hidden><div id="modpacks-bar"></div></div>
       <div id="modpacks-hint"></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="servers" hidden>
+    <div class="dialog glass mods-dialog">
+      <div class="panel-title">
+        <span>🌐 Serwery</span>
+        <button id="btn-close-servers" class="title-btn close" title="Zamknij">✕</button>
+      </div>
+      <form class="servers-add" id="servers-add">
+        <input id="server-name" placeholder="Nazwa (np. Serwer Kuby)" maxlength="40" spellcheck="false">
+        <input id="server-address" placeholder="Adres (np. mc.serwer.pl)" maxlength="100" spellcheck="false">
+        <button class="primary" type="submit">Dodaj</button>
+        <button id="btn-servers-refresh" type="button" title="Odśwież">⟳</button>
+      </form>
+      <ul id="servers-list"></ul>
+      <div id="servers-hint"></div>
     </div>
   </div>
 

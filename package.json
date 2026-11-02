@@ -1,6 +1,6 @@
 {
   "name": "minecraft-by-xbobersonx",
-  "version": "1.10.0",
+  "version": "1.11.0",
   "description": "Minecraft launcher by xBobersonx",
   "main": "main.js",
   "scripts": {
@@ -38,6 +38,7 @@
       "disk.js",
       "options.js",
       "mrpack.js",
+      "servers.js",
       "modpack.json",
       "assets/**"
     ],

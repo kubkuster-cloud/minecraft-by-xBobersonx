@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld("api", {
   loginMicrosoft: () => ipcRenderer.invoke("auth:microsoft"),
   logout: () => ipcRenderer.invoke("auth:logout"),
   restoreLogin: () => ipcRenderer.invoke("auth:restore"),
+  pingServer: address => ipcRenderer.invoke("servers:ping", address),
   launch: opts => ipcRenderer.invoke("game:launch", opts),
   openMods: target => ipcRenderer.invoke("folder:mods", target),
   listMods: opts => ipcRenderer.invoke("mods:list", opts),

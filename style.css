@@ -313,7 +313,7 @@ button.primary:not(:disabled):hover {
 }
 .tab .count { font-weight: normal; color: #666; }
 
-:is(#mods-list, #modpacks-list) {
+:is(#mods-list, #modpacks-list, #servers-list) {
   list-style: none;
   padding: 0;
   height: 300px;
@@ -323,7 +323,7 @@ button.primary:not(:disabled):hover {
   border-radius: 0 3px 3px 3px;
   color: #000;
 }
-:is(#mods-list, #modpacks-list) li {
+:is(#mods-list, #modpacks-list, #servers-list) li {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -331,11 +331,11 @@ button.primary:not(:disabled):hover {
   border-bottom: 1px solid #eef0f3;
   cursor: pointer;
 }
-:is(#mods-list, #modpacks-list) li:nth-child(even) { background: #f7f9fb; }
-:is(#mods-list, #modpacks-list) li:hover { background: #e5f3fb; }
-:is(#mods-list, #modpacks-list) li.off .mod-title { color: #999; text-decoration: line-through; }
-:is(#mods-list, #modpacks-list) li.empty { justify-content: center; color: #777; cursor: default; height: 100%; border: 0; background: none; }
-:is(#mods-list, #modpacks-list) input[type=checkbox] {
+:is(#mods-list, #modpacks-list, #servers-list) li:nth-child(even) { background: #f7f9fb; }
+:is(#mods-list, #modpacks-list, #servers-list) li:hover { background: #e5f3fb; }
+:is(#mods-list, #modpacks-list, #servers-list) li.off .mod-title { color: #999; text-decoration: line-through; }
+:is(#mods-list, #modpacks-list, #servers-list) li.empty { justify-content: center; color: #777; cursor: default; height: 100%; border: 0; background: none; }
+:is(#mods-list, #modpacks-list, #servers-list) input[type=checkbox] {
   flex: 0 0 auto;
   width: 15px;
   height: 15px;
@@ -353,8 +353,8 @@ button.primary:not(:disabled):hover {
   color: #5a6675;
 }
 /* wyniki wyszukiwania modów */
-:is(#mods-list, #modpacks-list) li.result { cursor: default; gap: 12px; padding: 8px 10px; }
-:is(#mods-list, #modpacks-list) li.result:hover { background: #f2f8fc; }
+:is(#mods-list, #modpacks-list, #servers-list) li.result { cursor: default; gap: 12px; padding: 8px 10px; }
+:is(#mods-list, #modpacks-list, #servers-list) li.result:hover { background: #f2f8fc; }
 .result-icon {
   width: 40px;
   height: 40px;
@@ -375,10 +375,10 @@ button.primary:not(:disabled):hover {
   overflow: hidden;
 }
 .result-meta { color: #999; font-size: 10px; margin-top: 2px; }
-:is(#mods-list, #modpacks-list) li.result button { flex-shrink: 0; height: 26px; padding: 0 12px; }
+:is(#mods-list, #modpacks-list, #servers-list) li.result button { flex-shrink: 0; height: 26px; padding: 0 12px; }
 
 /* shadery i tekstury: nagłówki sekcji i zainstalowane elementy */
-:is(#mods-list, #modpacks-list) li.section {
+:is(#mods-list, #modpacks-list, #servers-list) li.section {
   cursor: default;
   padding: 4px 10px;
   font-size: 11px;
@@ -387,8 +387,8 @@ button.primary:not(:disabled):hover {
   background: linear-gradient(#eef2f6, #e2e8ee);
   border-bottom: 1px solid #cdd5de;
 }
-:is(#mods-list, #modpacks-list) li.section:hover { background: linear-gradient(#eef2f6, #e2e8ee); }
-:is(#mods-list, #modpacks-list) input[type=radio] {
+:is(#mods-list, #modpacks-list, #servers-list) li.section:hover { background: linear-gradient(#eef2f6, #e2e8ee); }
+:is(#mods-list, #modpacks-list, #servers-list) input[type=radio] {
   flex: 0 0 auto;
   width: 15px;
   height: 15px;
@@ -396,8 +396,8 @@ button.primary:not(:disabled):hover {
   accent-color: #4caf2a;
   cursor: pointer;
 }
-:is(#mods-list, #modpacks-list) li.on .mod-title { font-weight: 600; color: #2f7d1f; }
-:is(#mods-list, #modpacks-list) li button.small { height: 22px; padding: 0 8px; font-size: 11px; }
+:is(#mods-list, #modpacks-list, #servers-list) li.on .mod-title { font-weight: 600; color: #2f7d1f; }
+:is(#mods-list, #modpacks-list, #servers-list) li button.small { height: 22px; padding: 0 8px; font-size: 11px; }
 
 /* ---------- Ustawienia z zakładkami ---------- */
 .settings-dialog { width: 660px; }
@@ -616,3 +616,23 @@ button.primary:not(:disabled):hover {
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes pop-in { from { opacity: 0; transform: scale(0.95); } }
 @keyframes shine { from { transform: translateX(-60px); } to { transform: translateX(400px); } }
+
+/* okno serwerów */
+#servers-list { border-radius: 3px; height: 330px; margin-top: 6px; }
+.servers-add { display: flex; gap: 6px; align-items: center; }
+.servers-add input { margin: 0; }
+#server-name { flex: 0 0 200px; }
+#server-address { flex: 1; }
+.servers-add button { flex-shrink: 0; }
+#servers-hint { margin-top: 6px; min-height: 15px; font-size: 11px; color: #f0f0f0; text-shadow: 0 1px 2px #000; }
+.result-desc.motd { white-space: pre-line; font-family: Consolas, monospace; }
+.server-tag { display: inline-block; padding: 0 5px; border-radius: 3px; font-size: 10px; font-weight: 600; margin-left: 4px; }
+.server-tag.cracked { background: #dff3d6; color: #2f7d1f; }
+.server-tag.premium { background: #fde3c8; color: #a4520b; }
+.server-tag.unknown { background: #e8ecf1; color: #777; }
+.server-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; background: #bbb; }
+.server-dot.on { background: #3fbf2a; }
+.server-dot.off { background: #d9443a; }
+.panel .buttons { gap: 6px; }
+.panel .buttons button { white-space: nowrap; padding: 0 10px; }
+#btn-servers, #btn-modpacks { padding: 0 7px; }
