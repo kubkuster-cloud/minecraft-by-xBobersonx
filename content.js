@@ -119,6 +119,7 @@ function setContentEnabled(instanceDir, type, file, enabled) {
 }
 
 function deleteContent(instanceDir, type, file) {
+  file = path.basename(file); // sama nazwa pliku z shaderpacks/ albo resourcepacks/
   setContentEnabled(instanceDir, type, file, false);
   fs.rmSync(path.join(folderOf(instanceDir, type), file), { recursive: true, force: true });
   const registry = readRegistry(instanceDir);
@@ -155,18 +156,19 @@ async function installContent(instanceDir, gameVersion, type, id) {
   const version = versions.find(v => v.version_type === "release") || versions[0];
   if (!version) throw new Error(`Brak wersji dla ${gameVersion}`);
   const file = version.files.find(f => f.primary) || version.files[0];
+  const name = path.basename(file.filename);
 
   const dir = folderOf(instanceDir, type);
   fs.mkdirSync(dir, { recursive: true });
   const res = await fetch(file.url, { headers: HEADERS });
-  if (!res.ok) throw new Error(`Nie udało się pobrać ${file.filename} (${res.status})`);
-  fs.writeFileSync(path.join(dir, file.filename), Buffer.from(await res.arrayBuffer()));
+  if (!res.ok) throw new Error(`Nie udało się pobrać ${name} (${res.status})`);
+  fs.writeFileSync(path.join(dir, name), Buffer.from(await res.arrayBuffer()));
 
   const registry = readRegistry(instanceDir);
-  registry[type] = { ...(registry[type] || {}), [file.filename]: id };
+  registry[type] = { ...(registry[type] || {}), [name]: id };
   writeRegistry(instanceDir, registry);
-  setContentEnabled(instanceDir, type, file.filename, true);
-  return file.filename;
+  setContentEnabled(instanceDir, type, name, true);
+  return name;
 }
 
 module.exports = { listContent, setContentEnabled, deleteContent, searchContent, installContent };

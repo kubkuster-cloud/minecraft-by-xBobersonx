@@ -43,6 +43,9 @@ let tray = null;
 let gameRunning = false;
 let msMinecraft = null; // zalogowane konto Microsoft (obiekt Minecraft z msmc)
 
+// Wiadomość do okna launchera (pomijana, jeśli okno jest już zamknięte)
+const send = (channel, data) => win && !win.isDestroyed() && win.webContents.send(channel, data);
+
 // Na czas gry launcher chowa się do zasobnika (obok zegara) i wraca po zamknięciu gry
 function hideToTray() {
   if (!win || win.isDestroyed()) return;
@@ -73,7 +76,6 @@ function showFromTray() {
 // wersja portable i uruchomienie przez npm start ich nie obsługują)
 function setupAutoUpdate() {
   if (!app.isPackaged || process.env.PORTABLE_EXECUTABLE_DIR) return;
-  const send = (ch, data) => win && !win.isDestroyed() && win.webContents.send(ch, data);
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.on("update-available", info => send("update:available", info.version));
@@ -125,7 +127,7 @@ function loadSettings() {
   try {
     return JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8"));
   } catch {
-    return { nick: "", version: "", ram: 4, showSnapshots: false };
+    return {}; // pierwsze uruchomienie — RAM ustawi się na „Zalecane”
   }
 }
 
@@ -193,6 +195,7 @@ async function installFabric(gameVersion, loaderVersion) {
     }
 
     const profileRes = await fetch(`${FABRIC_META}/${gameVersion}/${loader}/profile/json`);
+    if (!profileRes.ok) throw new Error(`Fabric: ${profileRes.status}`);
     const profile = await profileRes.json();
     const dir = path.join(GAME_DIR, "versions", profile.id);
     fs.mkdirSync(dir, { recursive: true });
@@ -230,7 +233,7 @@ function instanceDir(version, instance) {
   return instance && instance.startsWith("mp:") ? mrpack.modpackDir(GAME_DIR, instance.slice(3)) : packDir(version);
 }
 
-const logToConsole = msg => win.webContents.send("game:log", msg);
+const logToConsole = msg => send("game:log", msg);
 
 ipcMain.handle("pack:name", () => packName);
 
@@ -265,7 +268,7 @@ ipcMain.handle("modpacks:search", (_e, { query }) => mrpack.searchModpacks(GAME_
 ipcMain.handle("modpacks:install", (_e, { id }) =>
   mrpack.installModpack(GAME_DIR, id, {
     log: logToConsole,
-    progress: p => win.webContents.send("modpacks:progress", p),
+    progress: p => send("modpacks:progress", p),
   }));
 ipcMain.handle("modpacks:delete", async (_e, { slug, title }) => {
   if (gameRunning) throw new Error("Zamknij grę, zanim usuniesz modpack");
@@ -395,6 +398,13 @@ function describeCrash(instanceDir, version, log, code, reportFile) {
 ipcMain.handle("crash:open-report", (_e, file) => shell.openPath(file));
 
 // ---------- Miejsce na dysku ----------
+
+// 1 świat, 2 światy, 5 światów
+function plural(n, one, few, many) {
+  if (n === 1) return one;
+  const d = n % 10, t = n % 100;
+  return d >= 2 && d <= 4 && (t < 12 || t > 14) ? few : many;
+}
 const UPDATER_CACHE = path.join(app.getPath("home"), "AppData", "Local", "minecraft-by-xbobersonx-updater");
 
 function ensureGameClosed() {
@@ -413,7 +423,7 @@ ipcMain.handle("disk:delete-version", async (_e, { key, label, worlds }) => {
     title: "Usuń wersję",
     message: `Usunąć ${label}?`,
     detail: worlds > 0
-      ? `Razem z wersją znikną ${worlds} ${worlds === 1 ? "świat" : "światy"}, mody, shadery i ustawienia tej wersji. Tego nie da się cofnąć.`
+      ? `Razem z wersją znikną ${worlds} ${plural(worlds, "świat", "światy", "światów")}, mody, shadery i ustawienia tej wersji. Tego nie da się cofnąć.`
       : "Znikną mody, shadery i ustawienia tej wersji. Przy następnym uruchomieniu wszystko pobierze się od nowa.",
     buttons: ["Usuń", "Anuluj"],
     defaultId: 1,
@@ -486,11 +496,16 @@ function splitArgs(text) {
 const PREMIUM_CACHE = path.join(GAME_DIR, "cache", "launcher", "servers-premium.json");
 const PREMIUM_TTL = 24 * 3600 * 1000;
 
+// trzymany w pamięci: okno pinguje wszystkie serwery naraz, a osobne czytanie pliku gubiłoby wpisy
+let premiumCache = null;
+
 ipcMain.handle("servers:ping", async (_e, address) => {
   const info = await servers.ping(address);
   const key = `${info.host}:${info.port}`;
-  let cache = {};
-  try { cache = JSON.parse(fs.readFileSync(PREMIUM_CACHE, "utf8")); } catch {}
+  if (!premiumCache) {
+    try { premiumCache = JSON.parse(fs.readFileSync(PREMIUM_CACHE, "utf8")); } catch { premiumCache = {}; }
+  }
+  const cache = premiumCache;
   const hit = cache[key];
   if (hit && Date.now() - hit.at < PREMIUM_TTL) {
     info.premium = hit.premium;
@@ -512,9 +527,8 @@ function quickPlay(version, address) {
   return { type: legacy ? "legacy" : "multiplayer", identifier: address };
 }
 
-ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader, window: gameWindow, afterLaunch, javaArgs, syncOptions, server }) => {
+ipcMain.handle("game:launch", async (_e, { nick, version, ram, loader, window: gameWindow, afterLaunch, javaArgs, syncOptions, server }) => {
   const launcher = new Client();
-  const send = (ch, data) => win && !win.isDestroyed() && win.webContents.send(ch, data);
 
   // type trafia do --versionType; Minecraft pokazuje go na dole ekranu tytułowego
   // („Minecraft 1.21.11/xBobersonx”) i w F3
@@ -581,12 +595,17 @@ ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader, win
   });
   launcher.on("close", code => {
     gameRunning = false;
-    if (syncOptions) gameOptions.pull(gameDir, SHARED_OPTIONS);
     showFromTray();
     send("game:closed", code);
-    const report = findCrashReport(gameDir, startedAt);
-    if (code !== 0 || report) {
-      send("game:crash", { ...describeCrash(gameDir, version, logTail.join("\n"), code, report), instance: loader });
+    // błąd przy sprzątaniu po grze nie może wywalić całego launchera
+    try {
+      if (syncOptions) gameOptions.pull(gameDir, SHARED_OPTIONS);
+      const report = findCrashReport(gameDir, startedAt);
+      if (code !== 0 || report) {
+        send("game:crash", { ...describeCrash(gameDir, version, logTail.join("\n"), code, report), instance: loader });
+      }
+    } catch (err) {
+      send("game:log", `[launcher] Błąd po zamknięciu gry: ${err.message}`);
     }
   });
 
@@ -610,5 +629,11 @@ ipcMain.handle("game:launch", async (_e, { nick, version, type, ram, loader, win
 });
 
 
-app.whenReady().then(createWindow);
+// Tylko jedno okno launchera — drugie uruchomienie pokazuje to, które już działa
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on("second-instance", showFromTray);
+  app.whenReady().then(createWindow);
+}
 app.on("window-all-closed", () => app.quit());

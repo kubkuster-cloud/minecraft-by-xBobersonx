@@ -18,16 +18,23 @@ async function getJson(url) {
 }
 
 function modpackDir(gameDir, slug) {
+  if (!/^[\w.-]+$/.test(slug) || slug.includes("..")) throw new Error(`Zła nazwa modpacka: ${slug}`);
   return path.join(gameDir, "instances", `mp-${slug}`);
+}
+
+function readInfo(file) {
+  try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; }
 }
 
 // Zainstalowane modpacki (z ich zapisanymi informacjami)
 function listModpacks(gameDir) {
   const dir = path.join(gameDir, "instances");
   if (!fs.existsSync(dir)) return [];
+  // uszkodzony plik jednego modpacka nie może zablokować całej listy wersji
   return fs.readdirSync(dir)
-    .filter(n => n.startsWith("mp-") && fs.existsSync(path.join(dir, n, INFO)))
-    .map(n => JSON.parse(fs.readFileSync(path.join(dir, n, INFO), "utf8")))
+    .filter(n => n.startsWith("mp-"))
+    .map(n => readInfo(path.join(dir, n, INFO)))
+    .filter(info => info && info.slug && info.title)
     .sort((a, b) => a.title.localeCompare(b.title));
 }
 

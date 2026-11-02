@@ -17,7 +17,8 @@ function setStatus(text, percent) {
 }
 
 function persist() {
-  settings.nick = $("nick").value.trim();
+  // przy koncie Microsoft pole pokazuje nazwę konta — zapisany zostaje nick non-premium
+  if (!$("nick").disabled) settings.nick = $("nick").value.trim();
   settings.version = $("version").value;
   settings.ram = Number($("ram").value);
   settings.window = {
@@ -354,7 +355,7 @@ function renderMods() {
           ? "Uwaga: inne mody mogą wymagać tej biblioteki — gra może się nie uruchomić."
           : "";
       } catch (err) {
-        $("mods-hint").textContent = String(err.message || err).replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
+        $("mods-hint").textContent = cleanError(err);
       }
       renderMods();
     };
@@ -485,6 +486,13 @@ function section(text) {
   return li;
 }
 
+// Zwykły tekst w liście (np. „Szukanie…”, „Nic nie znaleziono”)
+function note(text) {
+  const li = section(text);
+  li.style.fontWeight = "normal";
+  return li;
+}
+
 function contentRow(item, type) {
   const li = document.createElement("li");
   li.classList.toggle("on", item.enabled);
@@ -516,7 +524,11 @@ function contentRow(item, type) {
     del.className = "small";
     del.textContent = "Usuń";
     del.onclick = async () => {
-      await window.api.deleteContent({ ...modsTarget(), type, file: item.file });
+      try {
+        await window.api.deleteContent({ ...modsTarget(), type, file: item.file });
+      } catch (err) {
+        $("mods-hint").textContent = cleanError(err);
+      }
       await loadContent();
       if (searchResults) doSearch();
     };
@@ -539,21 +551,13 @@ function renderContent() {
     };
     list.appendChild(none);
   } else if (contentInstalled.length === 0) {
-    const li = document.createElement("li");
-    li.className = "section";
-    li.style.fontWeight = "normal";
-    li.textContent = "Nic jeszcze nie zainstalowano — wybierz coś poniżej";
-    list.appendChild(li);
+    list.appendChild(note("Nic jeszcze nie zainstalowano — wybierz coś poniżej"));
   }
   for (const item of contentInstalled) list.appendChild(contentRow(item, type));
 
   list.appendChild(section(type === "shader" ? "Shadery do pobrania (Modrinth, działają z Iris)" : "Paczki tekstur do pobrania (Modrinth)"));
   if (!searchResults || searchResults.length === 0) {
-    const li = document.createElement("li");
-    li.className = "section";
-    li.style.fontWeight = "normal";
-    li.textContent = !searchResults ? "Szukanie…" : searchError || "Nic nie znaleziono";
-    list.appendChild(li);
+    list.appendChild(note(!searchResults ? "Szukanie…" : searchError || "Nic nie znaleziono"));
     return;
   }
   for (const item of searchResults) {
@@ -569,54 +573,52 @@ function renderContent() {
 
 // Wiersz wyniku wyszukiwania z przyciskiem „Zainstaluj”; install() zwraca tekst podpowiedzi
 function resultItem(mod, install, hintId = "mods-hint") {
-  {
-    const li = document.createElement("li");
-    li.className = "result";
+  const li = document.createElement("li");
+  li.className = "result";
 
-    const icon = document.createElement("img");
-    icon.className = "result-icon";
-    if (mod.icon) icon.src = mod.icon;
-    icon.alt = "";
+  const icon = document.createElement("img");
+  icon.className = "result-icon";
+  if (mod.icon) icon.src = mod.icon;
+  icon.alt = "";
 
-    const body = document.createElement("div");
-    body.className = "result-body";
-    const title = document.createElement("div");
-    title.className = "result-title";
-    title.textContent = mod.title + " ";
-    const author = document.createElement("small");
-    author.textContent = `od ${mod.author}`;
-    title.appendChild(author);
-    const desc = document.createElement("div");
-    desc.className = "result-desc";
-    desc.textContent = mod.description;
-    const meta = document.createElement("div");
-    meta.className = "result-meta";
-    meta.textContent = `${niceNumber(mod.downloads)} pobrań`;
-    body.append(title, desc, meta);
+  const body = document.createElement("div");
+  body.className = "result-body";
+  const title = document.createElement("div");
+  title.className = "result-title";
+  title.textContent = mod.title + " ";
+  const author = document.createElement("small");
+  author.textContent = `od ${mod.author}`;
+  title.appendChild(author);
+  const desc = document.createElement("div");
+  desc.className = "result-desc";
+  desc.textContent = mod.description;
+  const meta = document.createElement("div");
+  meta.className = "result-meta";
+  meta.textContent = `${niceNumber(mod.downloads)} pobrań`;
+  body.append(title, desc, meta);
 
-    const button = document.createElement("button");
-    button.textContent = mod.installed ? "Zainstalowany" : "Zainstaluj";
-    button.disabled = mod.installed;
-    if (!mod.installed) button.classList.add("primary");
-    button.onclick = async () => {
-      button.disabled = true;
-      button.textContent = "Instalowanie…";
-      try {
-        const hint = await install(mod);
-        mod.installed = true;
-        button.textContent = "Zainstalowany";
-        button.classList.remove("primary");
-        $(hintId).textContent = hint;
-      } catch (err) {
-        button.disabled = false;
-        button.textContent = "Zainstaluj";
-        $(hintId).textContent = cleanError(err);
-      }
-    };
+  const button = document.createElement("button");
+  button.textContent = mod.installed ? "Zainstalowany" : "Zainstaluj";
+  button.disabled = mod.installed;
+  if (!mod.installed) button.classList.add("primary");
+  button.onclick = async () => {
+    button.disabled = true;
+    button.textContent = "Instalowanie…";
+    try {
+      const hint = await install(mod);
+      mod.installed = true;
+      button.textContent = "Zainstalowany";
+      button.classList.remove("primary");
+      $(hintId).textContent = hint;
+    } catch (err) {
+      button.disabled = false;
+      button.textContent = "Zainstaluj";
+      $(hintId).textContent = cleanError(err);
+    }
+  };
 
-    li.append(icon, body, button);
-    return li;
-  }
+  li.append(icon, body, button);
+  return li;
 }
 
 function setModsTab(tab) {
@@ -686,6 +688,7 @@ $("btn-ms").onclick = async () => {
     setAccount(name, skin);
   } catch (err) {
     log(`Logowanie nieudane: ${err}`);
+    setStatus(`Logowanie nieudane: ${cleanError(err)}`);
   }
 };
 $("btn-logout").onclick = async () => {
@@ -711,7 +714,6 @@ async function startGame(server) {
     await window.api.launch({
       nick,
       version,
-      type: "release",
       ram: Number($("ram").value),
       loader,
       window: settings.window,
@@ -755,7 +757,7 @@ window.api.on("game:started", () => {
   $("play-label").textContent = "Gra działa";
 });
 window.api.on("game:closed", code => {
-  setStatus(code === 0 ? "" : `Gra zamknięta (kod ${code})`);
+  setStatus(code === 0 || code === null ? "" : `Gra zamknięta (kod ${code})`);
   document.querySelector(".progress").hidden = true;
   setPlaying(false);
 });
@@ -844,13 +846,6 @@ function diskRow(name, detail, size, max, button) {
   return li;
 }
 
-function diskSection(text) {
-  const li = document.createElement("li");
-  li.className = "section";
-  li.textContent = text;
-  return li;
-}
-
 async function loadDisk() {
   $("disk-total").textContent = "Liczenie…";
   $("disk-list").innerHTML = "";
@@ -859,7 +854,7 @@ async function loadDisk() {
   const max = Math.max(...data.versions.map(v => v.size), ...data.shared.map(s => s.size), 1);
   const list = $("disk-list");
 
-  list.appendChild(diskSection(`Wersje gry (${data.versions.length})`));
+  list.appendChild(section(`Wersje gry (${data.versions.length})`));
   for (const v of data.versions) {
     const p = v.parts;
     const detail = `światy ${niceSize(p.saves)} (${v.worlds}) · mody ${niceSize(p.mods)} · shadery i tekstury ${niceSize(p.content)} · reszta ${niceSize(p.other)}`;
@@ -879,10 +874,10 @@ async function loadDisk() {
     list.appendChild(diskRow(v.label, detail, v.size, max, del));
   }
 
-  list.appendChild(diskSection("Pliki wspólne"));
+  list.appendChild(section("Pliki wspólne"));
   for (const s of data.shared) list.appendChild(diskRow(s.label, "", s.size, max));
 
-  list.appendChild(diskSection(`Śmieci do wyczyszczenia: ${niceSize(data.junkSize)}`));
+  list.appendChild(section(`Śmieci do wyczyszczenia: ${niceSize(data.junkSize)}`));
   if (data.junk.length === 0) list.appendChild(diskRow("Nic do sprzątania 🎉", "", 0, max));
   for (const j of data.junk) list.appendChild(diskRow(j.label, "", j.size, max));
   $("btn-disk-clean").disabled = data.junkSize === 0;
@@ -962,21 +957,13 @@ function renderModpacks() {
   list.innerHTML = "";
   list.appendChild(section(`Zainstalowane (${modpacksInstalled.length})`));
   if (modpacksInstalled.length === 0) {
-    const li = document.createElement("li");
-    li.className = "section";
-    li.style.fontWeight = "normal";
-    li.textContent = "Nic jeszcze nie zainstalowano — wybierz modpack poniżej";
-    list.appendChild(li);
+    list.appendChild(note("Nic jeszcze nie zainstalowano — wybierz modpack poniżej"));
   }
   for (const mp of modpacksInstalled) list.appendChild(modpackRow(mp));
 
   list.appendChild(section("Modpacki do pobrania (Modrinth, Fabric)"));
   if (!modpackResults || modpackResults.length === 0) {
-    const li = document.createElement("li");
-    li.className = "section";
-    li.style.fontWeight = "normal";
-    li.textContent = !modpackResults ? "Szukanie…" : "Nic nie znaleziono";
-    list.appendChild(li);
+    list.appendChild(note(!modpackResults ? "Szukanie…" : "Nic nie znaleziono"));
     return;
   }
   for (const mp of modpackResults) {
@@ -1093,7 +1080,7 @@ function serverRow(srv, index) {
     desc.textContent = info.motd || "";
     const parts = [];
     if (info.players != null) parts.push(`${info.players}/${info.max} graczy`);
-    parts.push(`${info.ping} ms`);
+    if (info.ping !== null) parts.push(`${info.ping} ms`);
     if (info.version) parts.push(info.version);
     meta.textContent = parts.join(" · ");
   }

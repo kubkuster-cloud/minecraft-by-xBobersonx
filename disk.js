@@ -38,8 +38,13 @@ function neededJava(gameDir) {
   return needed;
 }
 
-// Profile Fabric starsze niż najnowszy dla danej wersji gry
+// Profile Fabric starsze niż najnowszy dla danej wersji gry.
+// Zostają te, których wymagają modpacki (bez nich modpack nie wystartuje bez internetu).
 function oldFabricProfiles(gameDir) {
+  const usedByModpacks = new Set(subdirs(path.join(gameDir, "instances"))
+    .map(n => instanceInfo(gameDir, n))
+    .filter(i => i.fabricLoader)
+    .map(i => `fabric-loader-${i.fabricLoader}-${i.gameVersion}`));
   const byGame = new Map();
   for (const name of subdirs(path.join(gameDir, "versions")).filter(n => n.startsWith("fabric-loader-"))) {
     const game = name.split("-").slice(3).join("-");
@@ -49,7 +54,7 @@ function oldFabricProfiles(gameDir) {
   const old = [];
   for (const names of byGame.values()) {
     names.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-    old.push(...names.slice(0, -1));
+    old.push(...names.slice(0, -1).filter(n => !usedByModpacks.has(n)));
   }
   return old.map(n => path.join(gameDir, "versions", n));
 }
@@ -80,7 +85,7 @@ function instanceInfo(gameDir, name) {
   }
   try {
     const info = JSON.parse(fs.readFileSync(path.join(gameDir, "instances", name, ".xbobersonx-modpack.json"), "utf8"));
-    return { gameVersion: info.gameVersion, label: `📦 ${info.title} (${info.gameVersion})`, modpack: true };
+    return { gameVersion: info.gameVersion, label: `📦 ${info.title} (${info.gameVersion})`, modpack: true, fabricLoader: info.fabricLoader };
   } catch {
     return { gameVersion: null, label: name, modpack: true };
   }
@@ -156,6 +161,8 @@ async function cleanJunk(gameDir, updaterCache) {
 // Usuwa folder z instances/ (wersję paczki albo modpack) razem ze światami i modami.
 // Pliki gry tej wersji usuwamy tylko, jeśli nie korzysta z nich żaden inny folder.
 async function deleteVersion(gameDir, key) {
+  // tylko nazwa folderu z instances/ — nigdy ścieżka, która mogłaby wyjść wyżej
+  if (!/^(pack|mp)-[^\\/]+$/.test(key) || key.includes("..")) throw new Error(`Zła nazwa wersji: ${key}`);
   const meta = instanceInfo(gameDir, key);
   const targets = [path.join(gameDir, "instances", key)];
   const version = meta.gameVersion;

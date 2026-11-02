@@ -47,7 +47,8 @@ function handshake(host, port, protocol, nextState) {
 }
 
 // Otwiera połączenie i oddaje kolejne pakiety ({id, data}) do onPacket, aż ten zwróci wynik
-function talk(host, port, first, onPacket) {
+// onEnd() może zwrócić wynik częściowy, gdy serwer przestanie odpowiadać albo się rozłączy
+function talk(host, port, first, onPacket, onEnd) {
   return new Promise((resolve, reject) => {
     const socket = net.connect({ host, port });
     let buf = Buffer.alloc(0);
@@ -56,10 +57,14 @@ function talk(host, port, first, onPacket) {
       socket.destroy();
       err ? reject(err) : resolve(value);
     };
-    const timer = setTimeout(() => done(new Error("Serwer nie odpowiada")), TIMEOUT);
+    const end = err => {
+      const partial = onEnd && onEnd();
+      partial ? done(null, partial) : done(err);
+    };
+    const timer = setTimeout(() => end(new Error("Serwer nie odpowiada")), TIMEOUT);
     socket.on("connect", () => socket.write(first(socket)));
     socket.on("error", err => done(new Error(err.code === "ENOTFOUND" ? "Nie ma takiego adresu" : "Serwer jest offline")));
-    socket.on("close", () => done(new Error("Serwer zamknął połączenie")));
+    socket.on("close", () => end(new Error("Serwer zamknął połączenie")));
     socket.on("data", chunk => {
       buf = Buffer.concat([buf, chunk]);
       try {
@@ -108,22 +113,16 @@ const cleanMotd = d => plainText(d).replace(/§./g, "").split("\n").map(s => s.t
 
 // ---------- ping ----------
 
+// Status serwera; ping = null, gdy serwer nie odpowiada na pakiet ping (część serwerów tak ma)
 async function ping(address) {
   const { host, port } = await resolve(address);
   let sentAt = 0;
-  let status;
+  let info = null;
   return talk(host, port, () => Buffer.concat([handshake(host, port, -1, 1), packet(0)]), (p, socket) => {
-    if (p.id === 0 && !status) {
+    if (p.id === 0 && !info) {
       const len = readVarint(p.data, 0);
-      status = JSON.parse(p.data.subarray(len.size, len.size + len.value).toString("utf8"));
-      const time = Buffer.alloc(8);
-      time.writeBigInt64BE(BigInt(Date.now()));
-      sentAt = Date.now();
-      socket.write(packet(1, time));
-      return undefined;
-    }
-    if (p.id === 1 && status) {
-      return {
+      const status = JSON.parse(p.data.subarray(len.size, len.size + len.value).toString("utf8"));
+      info = {
         host,
         port,
         motd: cleanMotd(status.description),
@@ -132,11 +131,17 @@ async function ping(address) {
         version: status.version ? cleanMotd(status.version.name) : "",
         protocol: status.version ? status.version.protocol : -1,
         favicon: typeof status.favicon === "string" && status.favicon.startsWith("data:image/") ? status.favicon : null,
-        ping: Date.now() - sentAt,
+        ping: null,
       };
+      const time = Buffer.alloc(8);
+      time.writeBigInt64BE(BigInt(Date.now()));
+      sentAt = Date.now();
+      socket.write(packet(1, time));
+      return undefined;
     }
+    if (p.id === 1 && info) return { ...info, ping: Date.now() - sentAt };
     return undefined;
-  });
+  }, () => info);
 }
 
 // ---------- premium czy non-premium ----------

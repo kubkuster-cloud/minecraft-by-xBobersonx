@@ -9,6 +9,9 @@ const AdmZip = require("adm-zip");
 const API = "https://api.modrinth.com/v2";
 const HEADERS = { "User-Agent": "xBobersonx/minecraft-launcher/1.0.0" };
 const PACK = require("./modpack.json");
+const PARALLEL = 8;
+const DISABLED = ".disabled";
+const RECHECK_MS = 6 * 60 * 60 * 1000; // paczkę sprawdzamy w Modrinth najwyżej co 6 godzin
 
 async function getJson(url) {
   const res = await fetch(url, { headers: HEADERS });
@@ -23,11 +26,9 @@ async function listVersions(project, gameVersion) {
   return (await getJson(`${API}/project/${project}/version?${query}`)) || [];
 }
 
-const PARALLEL = 8;
-
 function toFile(version, project, versions) {
   const file = version.files.find(f => f.primary) || version.files[0];
-  return { name: file.filename, url: file.url, sha1: file.hashes.sha1, project, id: version.project_id, versions };
+  return { name: path.basename(file.filename), url: file.url, sha1: file.hashes.sha1, project, id: version.project_id, versions };
 }
 
 function sha1(file) {
@@ -97,7 +98,10 @@ async function download(f, modsDir, log) {
   log(`[paczka] Pobieranie ${f.name}`);
   const res = await fetch(f.url, { headers: HEADERS });
   if (!res.ok) throw new Error(`Nie udało się pobrać ${f.name} (${res.status})`);
-  fs.writeFileSync(target, Buffer.from(await res.arrayBuffer()));
+  const data = Buffer.from(await res.arrayBuffer());
+  // urwane pobieranie dałoby uszkodzony .jar, przez który gra się nie uruchomi
+  if (crypto.createHash("sha1").update(data).digest("hex") !== f.sha1) throw new Error(`Uszkodzony plik ${f.name} — spróbuj ponownie`);
+  fs.writeFileSync(target, data);
 }
 
 // Niektóre mody wymagają dokładnej wersji innego moda (np. nuit_interop -> nuit 1.0.0-beta.5).
@@ -209,8 +213,6 @@ async function installPack(instanceDir, gameVersion, { log, progress }) {
   return modsDir;
 }
 
-const RECHECK_MS = 6 * 60 * 60 * 1000; // paczkę sprawdzamy w Modrinth najwyżej co 6 godzin
-
 // Czy paczka jest kompletnie pobrana (każdy plik z listy istnieje, włączony albo wyłączony)
 function packComplete(instanceDir, modsDir) {
   const list = readPackList(instanceDir);
@@ -220,7 +222,6 @@ function packComplete(instanceDir, modsDir) {
 
 // ---------- Zarządzanie modami (okno „Własne mody”) ----------
 
-const DISABLED = ".disabled";
 const infoCache = new Map(); // ścieżka+mtime -> { name, version }
 
 // Lista paczki; starsze wersje zapisywały same nazwy plików
@@ -278,7 +279,8 @@ function listMods(instanceDir) {
   const own = fs.existsSync(ownDir)
     ? fs.readdirSync(ownDir)
         .filter(n => n.endsWith(".jar") || n.endsWith(".jar" + DISABLED))
-        .map(n => entry(ownDir, n.endsWith(DISABLED) ? n.slice(0, -DISABLED.length) : n, { key: n.replace(DISABLED, "") }))
+        .map(n => n.endsWith(DISABLED) ? n.slice(0, -DISABLED.length) : n)
+        .map(n => entry(ownDir, n, { key: n }))
     : [];
   const pre = readPackList(instanceDir).map(f => entry(preDir, f.name, { key: f.project, library: f.library }));
   const byTitle = (a, b) => a.title.localeCompare(b.title);
