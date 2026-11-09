@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld("api", {
   listModpacks: () => ipcRenderer.invoke("modpacks:list"),
   searchModpacks: opts => ipcRenderer.invoke("modpacks:search", opts),
   installModpack: opts => ipcRenderer.invoke("modpacks:install", opts),
+  importModpack: () => ipcRenderer.invoke("modpacks:import"),
   deleteModpack: opts => ipcRenderer.invoke("modpacks:delete", opts),
   toggleMod: opts => ipcRenderer.invoke("mods:toggle", opts),
   searchMods: opts => ipcRenderer.invoke("mods:search", opts),

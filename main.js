@@ -263,6 +263,18 @@ ipcMain.handle("modpacks:install", (_e, { id }) =>
     log: logToConsole,
     progress: p => send("modpacks:progress", p),
   }));
+ipcMain.handle("modpacks:import", async () => {
+  const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+    title: "Importuj modpack",
+    filters: [{ name: "Modpack (.mrpack)", extensions: ["mrpack", "mcpack"] }],
+    properties: ["openFile"],
+  });
+  if (canceled) return null;
+  return mrpack.importModpack(GAME_DIR, filePaths[0], {
+    log: logToConsole,
+    progress: p => send("modpacks:progress", p),
+  });
+});
 ipcMain.handle("modpacks:delete", async (_e, { slug, title }) => {
   if (gameRunning) throw new Error("Zamknij grę, zanim usuniesz modpack");
   const { response } = await dialog.showMessageBox(win, {

@@ -1053,7 +1053,7 @@ function modpackRow(mp) {
   li.className = "result";
   const icon = document.createElement("img");
   icon.className = "result-icon";
-  if (mp.icon) icon.src = mp.icon;
+  icon.src = mp.icon || "assets/icon.png";
   icon.alt = "";
   const body = document.createElement("div");
   body.className = "result-body";
@@ -1107,23 +1107,35 @@ function renderModpacks() {
     return;
   }
   for (const mp of modpackResults) {
-    list.appendChild(resultItem(mp, async () => {
-      if (modpackInstalling) throw new Error("Poczekaj, aż skończy się instalacja poprzedniego modpacka");
-      modpackInstalling = true;
-      $("modpacks-progress").hidden = false;
-      $("modpacks-bar").style.width = "0%";
-      try {
-        const info = await window.api.installModpack({ id: mp.id });
-        await loadVersions(`${info.gameVersion}|mp:${info.slug}`);
-        await loadModpacks();
-        return `Zainstalowano ${info.title} (Minecraft ${info.gameVersion}) — wybrany na liście wersji, kliknij „Uruchom grę”`;
-      } finally {
-        modpackInstalling = false;
-        $("modpacks-progress").hidden = true;
-      }
-    }, "modpacks-hint"));
+    list.appendChild(resultItem(mp, () => runModpackInstall(() => window.api.installModpack({ id: mp.id })), "modpacks-hint"));
   }
 }
+
+// Wspólne dla Modrinth i pliku z dysku; install() zwraca null, gdy gracz zrezygnował
+async function runModpackInstall(install) {
+  if (modpackInstalling) throw new Error("Poczekaj, aż skończy się instalacja poprzedniego modpacka");
+  modpackInstalling = true;
+  $("modpacks-progress").hidden = false;
+  $("modpacks-bar").style.width = "0%";
+  try {
+    const info = await install();
+    if (!info) return "";
+    await loadVersions(`${info.gameVersion}|mp:${info.slug}`);
+    await loadModpacks();
+    return `Zainstalowano ${info.title} (Minecraft ${info.gameVersion}) — wybrany na liście wersji, kliknij „Uruchom grę”`;
+  } finally {
+    modpackInstalling = false;
+    $("modpacks-progress").hidden = true;
+  }
+}
+
+$("btn-modpacks-import").onclick = async () => {
+  try {
+    $("modpacks-hint").textContent = await runModpackInstall(() => window.api.importModpack());
+  } catch (err) {
+    $("modpacks-hint").textContent = cleanError(err);
+  }
+};
 
 async function loadModpacks() {
   modpacksInstalled = await window.api.listModpacks();
