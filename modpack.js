@@ -12,6 +12,7 @@ const PACK = require("./modpack.json");
 const PARALLEL = 8;
 const DISABLED = ".disabled";
 const RECHECK_MS = 6 * 60 * 60 * 1000; // paczkę sprawdzamy w Modrinth najwyżej co 6 godzin
+const PACK_LOGIC = 2; // zmiana sposobu składania paczki — wymusza jej ponowne sprawdzenie
 
 async function getJson(url) {
   const res = await fetch(url, { headers: HEADERS });
@@ -132,6 +133,130 @@ async function fixExactDeps(files, modsDir, log) {
   }
 }
 
+// ---------- Zgodność modów ----------
+
+// "1.16.1", "0.28.0+build.1", "1.0.0-beta.5", "1.16.x"; null = format, którego nie umiemy porównać
+function parseVersion(text) {
+  const m = /^v?(\d+(?:\.(?:\d+|[xX*]))*)(?:-([0-9A-Za-z.-]+))?(?:\+.*)?$/.exec(text.trim());
+  return m && { parts: m[1].split("."), pre: m[2] || null };
+}
+
+function compareVersions(a, b) {
+  for (let i = 0; i < Math.max(a.parts.length, b.parts.length); i++) {
+    const x = a.parts[i] || "0", y = b.parts[i] || "0";
+    if (/[xX*]/.test(x + y)) return 0;
+    if (Number(x) !== Number(y)) return Number(x) - Number(y);
+  }
+  if (!a.pre || !b.pre) return (a.pre ? -1 : 0) + (b.pre ? 1 : 0);
+  return a.pre.localeCompare(b.pre, undefined, { numeric: true });
+}
+
+function matchesPredicate(version, predicate) {
+  const [, op, target] = /^(>=|<=|>|<|=|\^|~)?(.*)$/.exec(predicate);
+  if (target === "*" || target === "") return true;
+  const v = parseVersion(version), t = parseVersion(target);
+  if (!v || !t) return true; // nieznany format: lepiej zostawić mod, niż wyrzucić dobry
+  const c = compareVersions(v, t);
+  switch (op) {
+    case ">=": return c >= 0;
+    case "<=": return c <= 0;
+    case ">": return c > 0;
+    case "<": return c < 0;
+    case "^": return c >= 0 && Number(v.parts[0]) === Number(t.parts[0]);
+    case "~": return c >= 0 && Number(v.parts[0]) === Number(t.parts[0]) && Number(v.parts[1] || 0) === Number(t.parts[1] || 0);
+    default: return c === 0;
+  }
+}
+
+// Wymaganie z fabric.mod.json: tekst albo lista alternatyw
+function satisfies(version, requirement) {
+  if (Array.isArray(requirement)) return requirement.some(r => satisfies(version, r));
+  if (typeof requirement !== "string") return true;
+  return requirement.split("||").some(alt => alt.trim().split(/\s+/).every(p => matchesPredicate(version, p)));
+}
+
+const NEW_MODMENU_API = "com/terraformersmc/modmenu/api/ModMenuApi";
+
+// Dane moda i wszystkie identyfikatory, które dostarcza (także mody spakowane w środku)
+function readJarInfo(zip) {
+  const info = JSON.parse(zip.readAsText("fabric.mod.json"));
+  const provided = [{ id: info.id, version: info.version }];
+  for (const alias of info.provides || []) provided.push({ id: alias, version: info.version });
+  for (const entry of zip.getEntries()) {
+    if (!/^META-INF\/jars\/[^/]+\.jar$/.test(entry.entryName)) continue;
+    try { provided.push(...readJarInfo(new AdmZip(entry.getData())).provided); } catch {}
+  }
+  return {
+    id: info.id,
+    depends: info.depends || {},
+    provided,
+    hasNewModMenuApi: !!zip.getEntry(`${NEW_MODMENU_API}.class`),
+    usesNewModMenuApi: usesNewModMenuApi(zip, info),
+  };
+}
+
+function usesNewModMenuApi(zip, info) {
+  const entrypoints = (info.entrypoints && info.entrypoints.modmenu) || [];
+  return entrypoints.some(e => {
+    const name = String(typeof e === "string" ? e : e.value).split("::")[0];
+    const entry = zip.getEntry(`${name.replace(/\./g, "/")}.class`);
+    return !!entry && entry.getData().includes(NEW_MODMENU_API);
+  });
+}
+
+// Co Fabric Loader zapewnia sam; gra i wersja Javy są sprawdzane osobno albo wcale
+const BUILT_IN_DEPS = new Set(["java", "fabricloader", "mixinextras"]);
+
+function incompatibility(mod, available, gameVersion) {
+  for (const [id, requirement] of Object.entries(mod.depends)) {
+    if (BUILT_IN_DEPS.has(id)) continue;
+    if (id === "minecraft") {
+      if (!satisfies(gameVersion, requirement)) return `wymaga Minecrafta ${requirement}`;
+      continue;
+    }
+    const versions = available.get(id);
+    if (!versions) return `wymaga ${id}, którego nie ma dla tej wersji gry`;
+    if (!versions.some(v => satisfies(v, requirement))) return `wymaga ${id} ${requirement}, a jest ${versions[0]}`;
+  }
+  return null;
+}
+
+// Modrinth bywa zbyt optymistyczny (mod od 1.16.5 oznaczony jako działający na 1.16.1), a jeden
+// niespełniony wymóg blokuje start całej gry. Usuwa takie mody; powtarza, bo usunięcie może
+// odebrać zależność kolejnym.
+function dropIncompatible(files, modsDir, gameVersion, log) {
+  const mods = [];
+  for (const file of files) {
+    try { mods.push({ file, ...readJarInfo(new AdmZip(path.join(modsDir, file.name))) }); } catch {}
+  }
+
+  const remove = (mod, reason) => {
+    log(`[paczka] Pomijam ${mod.file.name}: ${reason}`);
+    fs.rmSync(path.join(modsDir, mod.file.name), { force: true });
+    files.splice(files.indexOf(mod.file), 1);
+    mods.splice(mods.indexOf(mod), 1);
+  };
+
+  // Stary Mod Menu wczytuje wtyczki innych modów i wywraca grę na nowszym API, którego nie ma.
+  // Tracimy tylko menu — mody działają dalej.
+  const menu = mods.find(m => m.id === "modmenu");
+  if (menu && !menu.hasNewModMenuApi && mods.some(m => m.usesNewModMenuApi)) {
+    remove(menu, "za stary dla pozostałych modów");
+  }
+
+  for (;;) {
+    const available = new Map();
+    for (const { id, version } of mods.flatMap(m => m.provided)) {
+      if (!available.has(id)) available.set(id, []);
+      available.get(id).push(version);
+    }
+    let reason = null;
+    const bad = mods.find(m => (reason = incompatibility(m, available, gameVersion)));
+    if (!bad) return;
+    remove(bad, reason);
+  }
+}
+
 // Starsze wersje launchera trzymały mody paczki luzem w mods/ — przenosimy je do preinstalled/
 function removeLegacyPack(instanceDir) {
   const legacyList = path.join(instanceDir, "mods", ".xbobersonx-pack.json");
@@ -158,7 +283,7 @@ async function installPack(instanceDir, gameVersion, { log, progress }) {
 
   // Paczka sprawdzana niedawno (i lista modów się nie zmieniła) — nie pytamy Modrinth znowu
   const checkFile = path.join(instanceDir, ".xbobersonx-pack-check.json");
-  const packHash = crypto.createHash("sha1").update(JSON.stringify(PACK)).digest("hex");
+  const packHash = crypto.createHash("sha1").update(JSON.stringify(PACK) + PACK_LOGIC).digest("hex");
   const complete = packComplete(instanceDir, modsDir);
   let check = {};
   try { check = JSON.parse(fs.readFileSync(checkFile, "utf8")); } catch {}
@@ -193,6 +318,7 @@ async function installPack(instanceDir, gameVersion, { log, progress }) {
   });
 
   await fixExactDeps(files, modsDir, log);
+  dropIncompatible(files, modsDir, gameVersion, log);
 
   // sprzątanie dopiero po fixExactDeps, żeby nie kasować podmienionych wersji
   const wanted = new Set(files.map(f => f.name));
