@@ -17,6 +17,8 @@ const SKIP = new Set([
   "onboardAccessibility",
 ]);
 
+const NO_CONVERSION = "2147483647";
+
 function read(file) {
   const map = new Map();
   try {
@@ -49,6 +51,9 @@ function push(instanceDir, sharedFile) {
   const file = path.join(instanceDir, "options.txt");
   const options = read(file);
   for (const [k, v] of read(sharedFile)) if (!SKIP.has(k)) options.set(k, v);
+  // bez numeru wersji gra uznałaby plik za prastary, nie wczytała go i wróciła do domyślnych;
+  // wysoki numer znaczy „nic nie konwertuj”, a gra przy zapisie wpisze swój właściwy
+  if (!options.has("version")) options.set("version", NO_CONVERSION);
   write(file, options);
   return true;
 }

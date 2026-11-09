@@ -579,12 +579,14 @@ ipcMain.handle("game:launch", async (_e, { nick, version, ram, loader, window: g
     if (logTail.length > 800) logTail.splice(0, logTail.length - 800);
   };
   const startedAt = Date.now();
+  let optionsLoadFailed = false; // gra zapisała wtedy domyślne — nie mogą trafić do wspólnej kopii
 
   launcher.on("progress", p => send("game:progress", p));
   launcher.on("download-status", p => send("game:download", p));
   launcher.on("data", d => {
     send("game:log", d.toString());
     remember(d.toString());
+    if (d.toString().includes("Failed to load options")) optionsLoadFailed = true;
   });
   launcher.on("debug", d => send("game:log", d.toString()));
   launcher.on("arguments", () => {
@@ -599,7 +601,7 @@ ipcMain.handle("game:launch", async (_e, { nick, version, ram, loader, window: g
     send("game:closed", code);
     // błąd przy sprzątaniu po grze nie może wywalić całego launchera
     try {
-      if (syncOptions) gameOptions.pull(gameDir, SHARED_OPTIONS);
+      if (syncOptions && !optionsLoadFailed) gameOptions.pull(gameDir, SHARED_OPTIONS);
       const report = findCrashReport(gameDir, startedAt);
       if (code !== 0 || report) {
         send("game:crash", { ...describeCrash(gameDir, version, logTail.join("\n"), code, report), instance: loader });
