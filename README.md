@@ -21,7 +21,7 @@ Launcher do Minecrafta w stylu starego „Minecraft by Zyczu”, z wbudowaną pa
 - **Twój skin** — główka postaci obok nicku (prawdziwy skin z konta Microsoft)
 - **Automatyczne aktualizacje** — zainstalowany launcher sam pobiera nowe wersje z GitHub Releases
 - **Szybkie pobieranie** — mody sprawdzane i pobierane równolegle; na czas gry launcher chowa się do zasobnika
-- **Konto Microsoft** (z zapamiętywaniem logowania) albo **non-premium** (sam nick)
+- **Kilka kont** — konta Microsoft i nicki non-premium zapisane w launcherze, przełączane strzałką obok nicku
 - **Automatyczna Java** — launcher sam pobiera z serwerów Mojang właściwą Javę dla danej wersji gry (Java 21 dla nowych, Java 8 dla starych), nie trzeba jej instalować
 - **Zoptymalizowane ustawienia JVM** (G1GC) — mniej przycięć przy dużej liczbie modów
 - Ustawienie ilości RAM-u i konsola z logami gry

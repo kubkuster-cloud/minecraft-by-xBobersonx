@@ -27,6 +27,12 @@
     <div class="row">
       <label for="nick">Twój Nick:</label>
       <input id="nick" maxlength="16" spellcheck="false">
+      <div class="account-switch-wrap">
+        <button id="account-switch" title="Przełącz konto">
+          <svg viewBox="0 0 16 16"><path d="M3 5.5h10L8 11.5z" fill="#444"/></svg>
+        </button>
+        <div id="account-menu" hidden></div>
+      </div>
       <canvas id="head" width="24" height="24" title="Twój skin"></canvas>
     </div>
     <div class="row">
@@ -132,9 +138,16 @@
               </div>
             </div>
             <div class="buttons left">
-              <button id="btn-ms" class="primary">Zaloguj przez Microsoft</button>
+              <button id="btn-ms" class="primary">Dodaj konto Microsoft</button>
               <button id="btn-logout" hidden>Wyloguj</button>
             </div>
+            <h3>Zapisane konta</h3>
+            <ul id="accounts-list"></ul>
+            <div class="servers-add accounts-add">
+              <input id="new-nick" maxlength="16" spellcheck="false" placeholder="Nowy nick non-premium">
+              <button id="btn-add-nick">Dodaj nick</button>
+            </div>
+            <div id="accounts-hint" class="note"></div>
             <p class="note">
               <b>Microsoft</b> — twój prawdziwy skin, gra na serwerach premium, logowanie zapamiętane.<br>
               <b>Non-premium</b> — dowolny nick (wpisujesz go na ekranie głównym): single player, LAN i serwery non-premium.

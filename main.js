@@ -19,21 +19,14 @@ const servers = require("./servers");
 const ICON = path.join(__dirname, "assets", "icon.png");
 
 // Domyślne ustawienia graficzne dla nowej wersji (tylko gdy gra nie ma jeszcze options.txt)
-const DEFAULT_OPTIONS = [
-  "renderDistance:12",
-  "simulationDistance:8",
-  "maxFps:260",
-  "enableVsync:false",
-  "graphicsMode:1",
-  "biomeBlendRadius:1",
-  "mipmapLevels:2",
-  "entityDistanceScaling:1.0",
-  "lang:pl_pl",
-].join("\n");
+// Ustawienia startowe nowych graczy (klawisze, grafika, język). Zawiera numer wersji — bez niego gra by ich nie wczytała.
+const DEFAULT_OPTIONS = path.join(__dirname, "default-options.txt");
 
 const GAME_DIR = path.join(app.getPath("appData"), ".minecraft_by_xbobersonx");
 const SETTINGS_FILE = path.join(GAME_DIR, "launcher_settings.json");
-const ACCOUNT_FILE = path.join(GAME_DIR, "account.dat");
+const ACCOUNTS_FILE = path.join(GAME_DIR, "accounts.dat");
+const OLD_ACCOUNT_FILE = path.join(GAME_DIR, "account.dat");
+const OLD_PROFILE_FILE = path.join(GAME_DIR, "account-profile.json");
 const SHARED_OPTIONS = path.join(GAME_DIR, "shared-options.txt");
 const MANIFEST_URL = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
 const FABRIC_META = "https://meta.fabricmc.net/v2/versions/loader";
@@ -294,62 +287,138 @@ ipcMain.handle("folder:mods", (_e, { version, instance, preinstalled, content: t
   return shell.openPath(dir);
 });
 
-// Token odświeżania Microsoft zapisany na dysku, zaszyfrowany przez system (DPAPI w Windows)
-function saveRefreshToken(xbox) {
-  fs.mkdirSync(GAME_DIR, { recursive: true });
-  const token = xbox.save();
-  const data = safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(token) : Buffer.from(token);
-  fs.writeFileSync(ACCOUNT_FILE, data);
+// Zapisane konta Microsoft, zaszyfrowane przez system (DPAPI w Windows).
+// Format: { active: id konta albo null (non-premium), list: [{ id, name, skin, token }] }
+const NO_ACCOUNTS = () => ({ active: null, list: [] });
+const LEGACY_ID = "legacy"; // konto ze starej wersji, której profil się nie zachował
+let offlineProfile = null; // konto Microsoft bez internetu — nazwa i UUID bez tokenów
+let loginSeq = 0; // przełączenie konta unieważnia logowanie, które jeszcze trwa
+
+function encrypt(text) {
+  return safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(text) : Buffer.from(text);
 }
 
-function readRefreshToken() {
-  const data = fs.readFileSync(ACCOUNT_FILE);
+function decrypt(data) {
   return safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(data) : data.toString();
 }
 
-// Nazwa, UUID i skin konta (bez tokenów) — żeby bez internetu grać na tym samym profilu
-const PROFILE_FILE = path.join(GAME_DIR, "account-profile.json");
-let offlineProfile = null;
+function saveAccounts(store) {
+  fs.mkdirSync(GAME_DIR, { recursive: true });
+  fs.writeFileSync(ACCOUNTS_FILE, encrypt(JSON.stringify(store)));
+}
 
-async function finishLogin(xbox) {
+// Starsze wersje trzymały jedno konto w account.dat i account-profile.json
+function migrateOldAccount() {
+  if (!fs.existsSync(OLD_ACCOUNT_FILE)) return null;
+  let profile = {};
+  try { profile = JSON.parse(fs.readFileSync(OLD_PROFILE_FILE, "utf8")); } catch {}
+  const id = profile.id || LEGACY_ID;
+  const account = { id, name: profile.name || "Konto Microsoft", skin: profile.skin || null, token: decrypt(fs.readFileSync(OLD_ACCOUNT_FILE)) };
+  const store = { active: id, list: [account] };
+  saveAccounts(store);
+  fs.rmSync(OLD_ACCOUNT_FILE, { force: true });
+  fs.rmSync(OLD_PROFILE_FILE, { force: true });
+  return store;
+}
+
+function loadAccounts() {
+  try {
+    if (fs.existsSync(ACCOUNTS_FILE)) return JSON.parse(decrypt(fs.readFileSync(ACCOUNTS_FILE)));
+    return migrateOldAccount() || NO_ACCOUNTS();
+  } catch {
+    console.error("Nie udało się odczytać zapisanych kont");
+    return NO_ACCOUNTS();
+  }
+}
+
+function clearActiveAccount() {
+  loginSeq++;
+  msMinecraft = null;
+  offlineProfile = null;
+}
+
+// Zwraca null, jeśli w międzyczasie gracz wybrał inne konto
+async function finishLogin(xbox, seq) {
   const mc = await xbox.getMinecraft();
+  if (seq !== loginSeq) return null;
   if (!mc.profile) throw new Error("To konto Microsoft nie ma kupionego Minecrafta");
   msMinecraft = mc;
   offlineProfile = null;
-  saveRefreshToken(xbox);
-  const skins = msMinecraft.profile.skins || [];
-  const skin = (skins.find(s => s.state === "ACTIVE") || skins[0] || {}).url || null;
-  const profile = { id: mc.profile.id, name: mc.profile.name, skin: skin && skin.replace(/^http:/, "https:") };
-  fs.writeFileSync(PROFILE_FILE, JSON.stringify(profile));
-  return { name: profile.name, skin: profile.skin };
+  const skins = mc.profile.skins || [];
+  const url = (skins.find(s => s.state === "ACTIVE") || skins[0] || {}).url;
+  const skin = url ? url.replace(/^http:/, "https:") : null;
+  const account = { id: mc.profile.id, name: mc.profile.name, skin, token: xbox.save() };
+  const store = loadAccounts();
+  const others = store.list.filter(a => a.id !== LEGACY_ID);
+  const index = others.findIndex(a => a.id === account.id);
+  if (index >= 0) others[index] = account; else others.push(account);
+  saveAccounts({ active: account.id, list: others });
+  return { name: account.name, skin };
+}
+
+// Logowanie z zapisanego tokenu (bez okna). Bez internetu gramy offline na tym samym profilu.
+async function activateAccount(account) {
+  const seq = ++loginSeq;
+  try {
+    const xbox = await new Auth("select_account").refresh(account.token);
+    if (seq !== loginSeq) return null;
+    return await finishLogin(xbox, seq);
+  } catch (err) {
+    if (net.isOnline() || account.id === LEGACY_ID || seq !== loginSeq) throw err;
+    msMinecraft = null;
+    offlineProfile = { id: account.id, name: account.name };
+    const store = loadAccounts();
+    saveAccounts({ ...store, active: account.id });
+    return { name: account.name, skin: null, offline: true };
+  }
+}
+
+function removeAccount(id) {
+  const store = loadAccounts();
+  if (store.active === id) {
+    clearActiveAccount();
+    store.active = null;
+  }
+  store.list = store.list.filter(a => a.id !== id);
+  saveAccounts(store);
 }
 
 ipcMain.handle("auth:microsoft", async () => {
   const xbox = await new Auth("select_account").launch("electron");
-  return finishLogin(xbox);
+  return finishLogin(xbox, ++loginSeq);
 });
 
-// Przy starcie: zaloguj ponownie z zapisanego tokenu (bez okna logowania).
-// Bez internetu używa zapisanego profilu — single player działa na tym samym koncie.
 ipcMain.handle("auth:restore", async () => {
-  if (!fs.existsSync(ACCOUNT_FILE)) return null;
+  const store = loadAccounts();
+  const account = store.list.find(a => a.id === store.active);
+  if (!account) return null;
   try {
-    const xbox = await new Auth("select_account").refresh(readRefreshToken());
-    return await finishLogin(xbox);
+    return await activateAccount(account);
   } catch (err) {
     console.error("Nie udało się przywrócić logowania:", err);
-    if (net.isOnline() || !fs.existsSync(PROFILE_FILE)) return null;
-    offlineProfile = JSON.parse(fs.readFileSync(PROFILE_FILE, "utf8"));
-    return { name: offlineProfile.name, skin: null, offline: true };
+    return null;
   }
 });
 
-ipcMain.handle("auth:logout", () => {
-  msMinecraft = null;
-  offlineProfile = null;
-  fs.rmSync(ACCOUNT_FILE, { force: true });
-  fs.rmSync(PROFILE_FILE, { force: true });
+// Bez tokenów — do okna trafiają tylko nazwy
+ipcMain.handle("auth:accounts", () => {
+  const store = loadAccounts();
+  return store.list.map(({ id, name }) => ({ id, name, active: id === store.active }));
 });
+
+ipcMain.handle("auth:switch", (_e, id) => {
+  const account = loadAccounts().list.find(a => a.id === id);
+  if (!account) throw new Error("Nie ma takiego konta");
+  return activateAccount(account);
+});
+
+ipcMain.handle("auth:use-nick", () => {
+  clearActiveAccount();
+  saveAccounts({ ...loadAccounts(), active: null });
+});
+
+ipcMain.handle("auth:remove", (_e, id) => removeAccount(id));
+ipcMain.handle("auth:logout", () => removeAccount(loadAccounts().active));
 
 // Dane logowania dla gry: konto Microsoft (odświeżone, jeśli się da), zapisany profil bez internetu
 // albo konto non-premium z samym nickiem
@@ -569,7 +638,7 @@ ipcMain.handle("game:launch", async (_e, { nick, version, ram, loader, window: g
     // (options.txt mógł powstać wcześniej z samą listą paczek tekstur)
     const options = path.join(packDir(version), "options.txt");
     const current = fs.existsSync(options) ? fs.readFileSync(options, "utf8") : "";
-    if (!current.includes("renderDistance:")) fs.writeFileSync(options, `${DEFAULT_OPTIONS}\n${current}`);
+    if (!current.includes("renderDistance:")) fs.writeFileSync(options, `${fs.readFileSync(DEFAULT_OPTIONS, "utf8")}${current}`);
   }
 
   // ostatnie linie logu gry — do analizy, jeśli gra się wysypie

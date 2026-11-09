@@ -108,11 +108,146 @@ function setAccount(name, skin, offline) {
   drawHead(name ? skin : null);
   $("account-name").textContent = name || $("nick").value.trim() || "—";
   $("account").textContent = name ? `Konto Microsoft${offline ? " (offline)" : ""}` : "Konto non-premium";
-  $("btn-ms").hidden = !!name;
   $("btn-logout").hidden = !name;
   $("nick").disabled = !!name;
   if (name) $("nick").value = name;
+  renderAccounts();
 }
+
+// ---------- Zapisane konta ----------
+const NICK_RE = /^[A-Za-z0-9_]{3,16}$/;
+let accountChoices = [];
+
+function savedNicks() {
+  if (!settings.nicks) settings.nicks = settings.nick ? [settings.nick] : [];
+  return settings.nicks;
+}
+
+function rememberNick(nick) {
+  if (!savedNicks().includes(nick)) settings.nicks.push(nick);
+}
+
+async function renderAccounts() {
+  const microsoft = await window.api.listAccounts();
+  const nick = $("nick").value.trim();
+  accountChoices = [
+    ...microsoft.map(a => ({ type: "ms", id: a.id, name: a.name, active: premiumAccount && a.active })),
+    ...savedNicks().map(name => ({ type: "nick", name, active: !premiumAccount && name === nick })),
+  ];
+
+  const menu = $("account-menu");
+  menu.innerHTML = "";
+  for (const choice of accountChoices) {
+    const label = `${choice.active ? "✓ " : ""}${choice.name} (${choice.type === "ms" ? "Microsoft" : "non-premium"})`;
+    menu.appendChild(accountMenuItem(label, choice.active ? "active" : "", () => useAccount(choice)));
+  }
+  menu.appendChild(accountMenuItem("Zarządzaj kontami…", "manage", () => showSettingsPage("account")));
+
+  const list = $("accounts-list");
+  list.innerHTML = "";
+  if (accountChoices.length === 0) list.appendChild(note("Brak zapisanych kont"));
+  for (const choice of accountChoices) list.appendChild(accountRow(choice));
+}
+
+function accountMenuItem(label, className, action) {
+  const item = document.createElement("button");
+  item.textContent = label;
+  item.className = className;
+  item.onclick = () => {
+    $("account-menu").hidden = true;
+    action();
+  };
+  return item;
+}
+
+function accountRow(choice) {
+  const li = document.createElement("li");
+  li.className = "result";
+  const body = document.createElement("div");
+  body.className = "result-body";
+  const title = document.createElement("div");
+  title.className = "result-title";
+  title.textContent = choice.name;
+  const kind = document.createElement("span");
+  kind.className = `server-tag ${choice.type === "ms" ? "premium" : "cracked"}`;
+  kind.textContent = choice.type === "ms" ? "Microsoft" : "non-premium";
+  title.appendChild(kind);
+  if (choice.active) {
+    const active = document.createElement("span");
+    active.className = "server-tag active";
+    active.textContent = "używane";
+    title.appendChild(active);
+  }
+  body.appendChild(title);
+
+  const use = document.createElement("button");
+  use.textContent = "Użyj";
+  use.disabled = choice.active;
+  use.onclick = () => useAccount(choice);
+  const del = document.createElement("button");
+  del.textContent = "Usuń";
+  del.onclick = () => forgetAccount(choice);
+  li.append(body, use, del);
+  return li;
+}
+
+async function useAccount(choice) {
+  if ($("btn-play").disabled) return; // gra działa albo się uruchamia
+  if (choice.type === "nick") {
+    await window.api.useNick();
+    $("nick").value = choice.name;
+    setAccount(null);
+    persist();
+    return;
+  }
+  setStatus(`Przełączanie na ${choice.name}…`);
+  $("accounts-hint").textContent = "";
+  try {
+    const account = await window.api.switchAccount(choice.id);
+    if (account) setAccount(account.name, account.skin, account.offline);
+    setStatus("");
+  } catch (err) {
+    const text = `Nie udało się przełączyć na ${choice.name} — usuń to konto i dodaj je ponownie`;
+    log(`${text}: ${err}`);
+    setStatus(text);
+    $("accounts-hint").textContent = text;
+  }
+}
+
+async function forgetAccount(choice) {
+  if ($("btn-play").disabled) return;
+  if (choice.type === "nick") {
+    settings.nicks = savedNicks().filter(n => n !== choice.name);
+    window.api.saveSettings(settings);
+    renderAccounts();
+    return;
+  }
+  await window.api.removeAccount(choice.id);
+  if (choice.active) {
+    $("nick").value = settings.nick || "";
+    setAccount(null);
+  } else {
+    renderAccounts();
+  }
+}
+
+$("account-switch").onclick = () => { $("account-menu").hidden = !$("account-menu").hidden; };
+document.addEventListener("click", e => {
+  if (!e.target.closest(".account-switch-wrap")) $("account-menu").hidden = true;
+});
+
+$("btn-add-nick").onclick = () => {
+  const nick = $("new-nick").value.trim();
+  if (!NICK_RE.test(nick)) {
+    $("accounts-hint").textContent = "Nick: 3–16 znaków, litery, cyfry lub _";
+    return;
+  }
+  $("accounts-hint").textContent = "";
+  $("new-nick").value = "";
+  rememberNick(nick);
+  window.api.saveSettings(settings);
+  renderAccounts();
+};
 
 async function init() {
   settings = await window.api.loadSettings();
@@ -171,6 +306,7 @@ async function loadVersions(select) {
 $("nick").onchange = () => {
   persist();
   if ($("btn-logout").hidden) $("account-name").textContent = $("nick").value.trim() || "—";
+  renderAccounts();
 };
 $("version").onchange = persist;
 // Suwak sięga całej pamięci komputera; podpowiedź ostrzega przed zbyt dużą ilością
@@ -693,21 +829,23 @@ $("btn-ms").onclick = async () => {
 };
 $("btn-logout").onclick = async () => {
   await window.api.logout();
-  setAccount(null);
   $("nick").value = settings.nick || "";
+  setAccount(null);
 };
 
 // server = adres serwera, na który gra wchodzi od razu po starcie
 async function startGame(server) {
   const nick = $("nick").value.trim();
-  if (!/^[A-Za-z0-9_]{3,16}$/.test(nick)) {
+  if (!NICK_RE.test(nick)) {
     setStatus("Nick: 3–16 znaków, litery, cyfry lub _");
     return;
   }
   const [version, loader] = $("version").value.split("|");
   if (!loader || $("btn-play").disabled) return;
 
+  if (!premiumAccount) rememberNick(nick);
   persist();
+  renderAccounts();
   setPlaying(true);
   setStatus(server ? `Przygotowywanie… (potem wejście na ${server})` : "Przygotowywanie…", 0);
   try {
@@ -733,6 +871,8 @@ $("btn-play").onclick = () => startGame();
 
 function setPlaying(on) {
   $("btn-play").disabled = on;
+  $("account-switch").disabled = on;
+  $("account-menu").hidden = true;
   $("play-label").textContent = on ? "Uruchamianie…" : "Uruchom grę";
 }
 

@@ -313,7 +313,7 @@ button.primary:not(:disabled):hover {
 }
 .tab .count { font-weight: normal; color: #666; }
 
-:is(#mods-list, #modpacks-list, #servers-list) {
+:is(#mods-list, #modpacks-list, #servers-list, #accounts-list) {
   list-style: none;
   padding: 0;
   height: 300px;
@@ -323,7 +323,7 @@ button.primary:not(:disabled):hover {
   border-radius: 0 3px 3px 3px;
   color: #000;
 }
-:is(#mods-list, #modpacks-list, #servers-list) li {
+:is(#mods-list, #modpacks-list, #servers-list, #accounts-list) li {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -331,11 +331,11 @@ button.primary:not(:disabled):hover {
   border-bottom: 1px solid #eef0f3;
   cursor: pointer;
 }
-:is(#mods-list, #modpacks-list, #servers-list) li:nth-child(even) { background: #f7f9fb; }
-:is(#mods-list, #modpacks-list, #servers-list) li:hover { background: #e5f3fb; }
-:is(#mods-list, #modpacks-list, #servers-list) li.off .mod-title { color: #999; text-decoration: line-through; }
-:is(#mods-list, #modpacks-list, #servers-list) li.empty { justify-content: center; color: #777; cursor: default; height: 100%; border: 0; background: none; }
-:is(#mods-list, #modpacks-list, #servers-list) input[type=checkbox] {
+:is(#mods-list, #modpacks-list, #servers-list, #accounts-list) li:nth-child(even) { background: #f7f9fb; }
+:is(#mods-list, #modpacks-list, #servers-list, #accounts-list) li:hover { background: #e5f3fb; }
+:is(#mods-list, #modpacks-list, #servers-list, #accounts-list) li.off .mod-title { color: #999; text-decoration: line-through; }
+:is(#mods-list, #modpacks-list, #servers-list, #accounts-list) li.empty { justify-content: center; color: #777; cursor: default; height: 100%; border: 0; background: none; }
+:is(#mods-list, #modpacks-list, #servers-list, #accounts-list) input[type=checkbox] {
   flex: 0 0 auto;
   width: 15px;
   height: 15px;
@@ -353,8 +353,8 @@ button.primary:not(:disabled):hover {
   color: #5a6675;
 }
 /* wyniki wyszukiwania modów */
-:is(#mods-list, #modpacks-list, #servers-list) li.result { cursor: default; gap: 12px; padding: 8px 10px; }
-:is(#mods-list, #modpacks-list, #servers-list) li.result:hover { background: #f2f8fc; }
+:is(#mods-list, #modpacks-list, #servers-list, #accounts-list) li.result { cursor: default; gap: 12px; padding: 8px 10px; }
+:is(#mods-list, #modpacks-list, #servers-list, #accounts-list) li.result:hover { background: #f2f8fc; }
 .result-icon {
   width: 40px;
   height: 40px;
@@ -375,10 +375,10 @@ button.primary:not(:disabled):hover {
   overflow: hidden;
 }
 .result-meta { color: #999; font-size: 10px; margin-top: 2px; }
-:is(#mods-list, #modpacks-list, #servers-list) li.result button { flex-shrink: 0; height: 26px; padding: 0 12px; }
+:is(#mods-list, #modpacks-list, #servers-list, #accounts-list) li.result button { flex-shrink: 0; height: 26px; padding: 0 12px; }
 
 /* shadery i tekstury: nagłówki sekcji i zainstalowane elementy */
-:is(#mods-list, #modpacks-list, #servers-list) li.section {
+:is(#mods-list, #modpacks-list, #servers-list, #accounts-list) li.section {
   cursor: default;
   padding: 4px 10px;
   font-size: 11px;
@@ -387,8 +387,8 @@ button.primary:not(:disabled):hover {
   background: linear-gradient(#eef2f6, #e2e8ee);
   border-bottom: 1px solid #cdd5de;
 }
-:is(#mods-list, #modpacks-list, #servers-list) li.section:hover { background: linear-gradient(#eef2f6, #e2e8ee); }
-:is(#mods-list, #modpacks-list, #servers-list) input[type=radio] {
+:is(#mods-list, #modpacks-list, #servers-list, #accounts-list) li.section:hover { background: linear-gradient(#eef2f6, #e2e8ee); }
+:is(#mods-list, #modpacks-list, #servers-list, #accounts-list) input[type=radio] {
   flex: 0 0 auto;
   width: 15px;
   height: 15px;
@@ -396,8 +396,8 @@ button.primary:not(:disabled):hover {
   accent-color: #4caf2a;
   cursor: pointer;
 }
-:is(#mods-list, #modpacks-list, #servers-list) li.on .mod-title { font-weight: 600; color: #2f7d1f; }
-:is(#mods-list, #modpacks-list, #servers-list) li button.small { height: 22px; padding: 0 8px; font-size: 11px; }
+:is(#mods-list, #modpacks-list, #servers-list, #accounts-list) li.on .mod-title { font-weight: 600; color: #2f7d1f; }
+:is(#mods-list, #modpacks-list, #servers-list, #accounts-list) li button.small { height: 22px; padding: 0 8px; font-size: 11px; }
 
 /* ---------- Ustawienia z zakładkami ---------- */
 .settings-dialog { width: 660px; }
@@ -636,3 +636,40 @@ button.primary:not(:disabled):hover {
 .panel .buttons { gap: 6px; }
 .panel .buttons button { white-space: nowrap; padding: 0 10px; }
 #btn-servers, #btn-modpacks { padding: 0 7px; }
+
+/* konta */
+.account-switch-wrap { position: relative; flex-shrink: 0; }
+#account-switch { width: 24px; height: 24px; padding: 0; }
+#account-menu {
+  position: absolute;
+  top: 27px;
+  right: -32px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  min-width: 210px;
+  max-height: 150px;
+  overflow-y: auto;
+  padding: 3px;
+  background: #fff;
+  border: 1px solid #8e9aa8;
+  border-radius: 3px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5);
+}
+#account-menu[hidden] { display: none; }
+#account-menu button {
+  flex-shrink: 0;
+  justify-content: flex-start;
+  height: 24px;
+  padding: 0 8px;
+  white-space: nowrap;
+  background: transparent;
+  border-color: transparent;
+  color: #000;
+}
+#account-menu button:hover { background: #e5f3fb; }
+#account-menu button.active { font-weight: 600; color: #2f7d1f; }
+#account-menu button.manage { border-top: 1px solid #d8dde3; border-radius: 0; color: #1d5fa3; }
+#accounts-list { border-radius: 3px; height: 92px; margin-top: 6px; }
+.accounts-add { margin-top: 6px; }
+.server-tag.active { background: #d7e9fb; color: #1d5fa3; }
