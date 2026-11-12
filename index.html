@@ -3,69 +3,137 @@
 <head>
   <meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://cdn.modrinth.com https://textures.minecraft.net">
-  <title>Minecraft Launcher by xBobersonx</title>
+  <title>BobrMC</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <canvas id="bg"></canvas>
-  <img id="bg-img" alt="">
-  <div class="vignette"></div>
-
-  <h1 class="logo">
-    <canvas id="logo-mc"></canvas>
-    <span class="by">by <span>xBobersonx</span></span>
-  </h1>
-
-  <section class="panel glass">
-    <div class="panel-title">
-      <span>Minecraft Launcher by xBobersonx</span>
-      <button id="btn-settings" class="title-btn" title="Ustawienia">
-        <svg viewBox="0 0 16 16"><path d="M9.4 1l.3 1.9c.5.2 1 .5 1.4.8l1.8-.7 1.4 2.4-1.5 1.2a5 5 0 0 1 0 1.7l1.5 1.2-1.4 2.4-1.8-.7c-.4.3-.9.6-1.4.8L9.4 15H6.6l-.3-1.9c-.5-.2-1-.5-1.4-.8l-1.8.7-1.4-2.4 1.5-1.2a5 5 0 0 1 0-1.7L1.7 6.5l1.4-2.4 1.8.7c.4-.3.9-.6 1.4-.8L6.6 1h2.8zM8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></svg>
-      </button>
+  <!-- Ikony: Lucide (ISC), assets/LICENSES.md -->
+  <header class="titlebar" id="titlebar">
+    <h1 class="page-title" id="page-title">Home</h1>
+    <div class="titlebar-actions">
+      <button class="tb-btn" id="tb-search" title="Szukaj modów"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></button>
+      <button class="tb-btn" id="tb-notify" title="Powiadomienia"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/></svg><span class="badge" id="notify-count" hidden>0</span></button>
+      <div class="notify-panel" id="notify-panel" hidden></div>
+      <button class="tb-btn" id="tb-settings" title="Ustawienia"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>
     </div>
+    <span class="tb-sep"></span>
+    <div class="window-controls">
+      <button class="win-btn" id="win-min" title="Minimalizuj"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+      <button class="win-btn" id="win-max" title="Maksymalizuj">
+        <svg class="icon icon-max" viewBox="0 0 24 24" aria-hidden="true"><rect width="16" height="16" x="4" y="4" rx="2"/></svg>
+        <svg class="icon icon-restore" viewBox="0 0 24 24" aria-hidden="true"><rect width="13" height="13" x="8" y="8" rx="2"/><path d="M4 16V6a2 2 0 0 1 2-2h10"/></svg>
+      </button>
+      <button class="win-btn close" id="win-close" title="Zamknij"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+    </div>
+  </header>
 
-    <div class="row">
-      <label for="nick">Twój Nick:</label>
-      <input id="nick" maxlength="16" spellcheck="false">
-      <div class="account-switch-wrap">
-        <button id="account-switch" title="Przełącz konto">
-          <svg viewBox="0 0 16 16"><path d="M3 5.5h10L8 11.5z" fill="#444"/></svg>
-        </button>
-        <div id="account-menu" hidden></div>
+  <nav class="sidebar" id="sidebar">
+    <div class="side-logo"><img src="assets/icon.png" alt="BobrMC"><span class="sr" id="app-version"></span></div>
+    <button class="side-btn active" id="btn-home" data-tip="Home"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="tip">Home</span></button>
+    <button class="side-btn" id="btn-modpacks" data-tip="Wersje"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg><span class="tip">Wersje</span></button>
+    <button class="side-btn" id="btn-mods" data-tip="Mody"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z"/></svg><span class="tip">Mody</span></button>
+    <button class="side-btn" id="btn-servers" data-tip="Serwery"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 6h.01"/><path d="M6 18h.01"/></svg><span class="tip">Serwery</span></button>
+    <div class="grow"></div>
+    <button class="side-btn" id="btn-settings"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg><span class="tip">Ustawienia</span></button>
+    <button class="side-btn side-avatar" id="btn-account"><canvas id="side-head" width="8" height="8"></canvas><span class="tip">Konto</span></button>
+  </nav>
+
+  <main class="home" id="home">
+    <div class="home-grid">
+      <!-- lewa kolumna -->
+      <div class="col-main">
+        <div class="home-date" id="home-date"></div>
+
+        <section class="card hero-card" id="hero">
+          <div class="hero-bg"><canvas id="bg"></canvas><img id="bg-img" alt=""></div>
+          <div class="hero-skin" id="hero-skin"><div class="skeleton skin-sk"></div></div>
+          <div class="hero-body">
+            <div class="hero-nick" id="hero-nick"><div class="skeleton line w-40 h-32"></div></div>
+            <div class="hero-meta">
+              <span class="meta" id="meta-version"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"/><path d="M12 22V12"/><path d="m3.3 7 8.7 5 8.7-5"/></svg><span class="meta-text"><div class="skeleton line w-80"></div></span></span>
+              <span class="meta" id="meta-mods"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z"/></svg><span class="meta-text"><div class="skeleton line w-60"></div></span></span>
+              <span class="meta" id="meta-time"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><span class="meta-text"><div class="skeleton line w-60"></div></span></span>
+            </div>
+            <div class="play-row">
+              <button id="btn-play" class="play-btn primary">
+                <svg class="icon fill" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5v17a1 1 0 0 0 1.5.86l14-8.5a1 1 0 0 0 0-1.72l-14-8.5A1 1 0 0 0 6 3.5z"/></svg>
+                <span class="play-text"><span id="play-label">Graj</span><small id="play-sub"></small></span>
+              </button>
+              <label class="version-pick" title="Wybierz wersję">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                <select id="version"><option>Ładowanie…</option></select>
+              </label>
+            </div>
+            <div class="progress" hidden><div id="bar"></div></div>
+            <div id="status"></div>
+            <div class="hero-last" id="hero-last"></div>
+          </div>
+        </section>
+
+        <div class="quick-row" id="quick-row">
+          <div class="card quick-card"><div class="skeleton qc-icon"></div><div class="qc-body"><div class="skeleton line w-70"></div><div class="skeleton line w-40"></div></div></div>
+          <div class="card quick-card"><div class="skeleton qc-icon"></div><div class="qc-body"><div class="skeleton line w-70"></div><div class="skeleton line w-40"></div></div></div>
+          <div class="card quick-card"><div class="skeleton qc-icon"></div><div class="qc-body"><div class="skeleton line w-70"></div><div class="skeleton line w-40"></div></div></div>
+        </div>
+
+        <section>
+          <div class="section-header"><h2>Co nowego</h2><button class="link" id="news-all">Zobacz wszystkie ›</button></div>
+          <div class="news-row" id="news-row">
+            <div class="card news-card"><div class="skeleton nc-fill"></div></div>
+            <div class="card news-card"><div class="skeleton nc-fill"></div></div>
+          </div>
+        </section>
       </div>
-      <canvas id="head" width="24" height="24" title="Twój skin"></canvas>
-    </div>
-    <div class="row">
-      <label for="version">Wersja:</label>
-      <select id="version"><option>Ładowanie…</option></select>
-    </div>
 
-    <div class="buttons">
-      <button id="btn-servers" title="Serwery">
-        <svg viewBox="0 0 16 16" fill="none" stroke="#2f74c0" stroke-width="1.3"><circle cx="8" cy="8" r="6.3"/><ellipse cx="8" cy="8" rx="2.8" ry="6.3"/><path d="M1.7 8h12.6M2.8 4.7h10.4M2.8 11.3h10.4"/></svg>
-      </button>
-      <button id="btn-modpacks" title="Gotowe modpacki z Modrinth">
-        <svg viewBox="0 0 16 16"><path d="M8 1.5l6 2.8v7.4L8 14.5 2 11.7V4.3z" fill="#c98a45"/><path d="M8 7.1L14 4.3 8 1.5 2 4.3z" fill="#e2ad6b"/><path d="M8 7.1v7.4l6-2.8V4.3z" fill="#a8692f"/><path d="M4.6 3.1l6 2.8v2" stroke="#f3d9a8" stroke-width="1.2" fill="none"/></svg>
-      </button>
-      <button id="btn-mods">
-        <svg viewBox="0 0 16 16"><path d="M14.7 4.1l-2.3 2.3-2-.5-.5-2 2.3-2.3A4 4 0 0 0 7 6.7L1.6 12a1.4 1.4 0 0 0 2 2l5.4-5.4a4 4 0 0 0 5.7-4.5z" fill="#6b7a8c"/></svg>
-        Własne mody
-      </button>
-      <button id="btn-play" class="primary">
-        <svg viewBox="0 0 16 16"><path d="M4 2.5v11l9-5.5z" fill="#2f7d1f"/></svg>
-        <span id="play-label">Uruchom grę</span>
-      </button>
+      <!-- prawa kolumna -->
+      <aside class="col-side">
+        <section>
+          <div class="section-header"><h2>Serwery</h2><button class="link" id="servers-all">Zobacz wszystkie ›</button></div>
+          <div class="card list-card" id="home-servers">
+            <div class="server-row"><div class="skeleton sr-icon"></div><div class="sr-body"><div class="skeleton line w-60"></div><div class="skeleton line w-40"></div></div></div>
+            <div class="server-row"><div class="skeleton sr-icon"></div><div class="sr-body"><div class="skeleton line w-60"></div><div class="skeleton line w-40"></div></div></div>
+            <div class="server-row"><div class="skeleton sr-icon"></div><div class="sr-body"><div class="skeleton line w-60"></div><div class="skeleton line w-40"></div></div></div>
+          </div>
+        </section>
+
+        <section>
+          <div class="section-header"><h2>Konto</h2></div>
+          <div class="card account-home" id="account-home">
+            <div class="account-row">
+              <canvas id="head" width="24" height="24" title="Twój skin"></canvas>
+              <div class="account-text">
+                <input id="nick" maxlength="16" spellcheck="false" placeholder="Nick" title="Twój nick">
+                <span class="account-kind" id="account-kind"></span>
+              </div>
+              <div class="account-switch-wrap">
+                <button id="account-switch" title="Przełącz konto"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+                <div id="account-menu" hidden></div>
+              </div>
+            </div>
+            <div class="account-actions">
+              <button id="home-accounts">Zarządzaj kontami</button>
+              <button id="home-logout">Wyloguj</button>
+            </div>
+          </div>
+        </section>
+      </aside>
     </div>
-
-    <div class="progress" hidden><div id="bar"></div></div>
-    <div id="status"></div>
-  </section>
-
-  <div class="app-version" id="app-version"></div>
+  </main>
 
   <div class="update-bar glass" id="update-bar" hidden>
     <span id="update-text"></span>
     <button id="btn-update" class="primary" hidden>Uruchom ponownie</button>
+  </div>
+
+  <div class="overlay" id="news" hidden>
+    <div class="dialog glass news-dialog">
+      <div class="panel-title">
+        <span>Co nowego</span>
+        <button id="btn-close-news" class="title-btn close" title="Zamknij">✕</button>
+      </div>
+      <div id="news-list" class="news-list"></div>
+      <div class="buttons"><button id="news-github">Zobacz na GitHubie</button></div>
+    </div>
   </div>
 
   <div class="overlay" id="settings" hidden>
@@ -77,12 +145,12 @@
 
       <div class="settings-body">
         <nav class="settings-nav">
-          <button class="nav-item active" data-page="game">🎮 Gra</button>
-          <button class="nav-item" data-page="account">👤 Konto</button>
-          <button class="nav-item" data-page="look">🖼️ Wygląd</button>
-          <button class="nav-item" data-page="disk">💾 Dysk</button>
-          <button class="nav-item" data-page="console">📜 Konsola</button>
-          <button class="nav-item" data-page="about">ℹ️ O launcherze</button>
+          <button class="nav-item active" data-page="game">Gra</button>
+          <button class="nav-item" data-page="account">Konto</button>
+          <button class="nav-item" data-page="look">Wygląd</button>
+          <button class="nav-item" data-page="disk">Dysk</button>
+          <button class="nav-item" data-page="console">Konsola</button>
+          <button class="nav-item" data-page="about">O launcherze</button>
         </nav>
 
         <div class="settings-pages">
@@ -111,7 +179,7 @@
             </div>
 
             <h3>Ustawienia w grze</h3>
-            <label class="check"><input type="checkbox" id="sync-options"> Wspólne dla wszystkich wersji (sterowanie, myszka, dźwięk, grafika)</label>
+            <label class="check"><input type="checkbox" id="sync-options"> Wspólne dla wszystkich wersji (sterowanie i klawisze, grafika, dźwięk, ustawienia modów, tekstury, shadery, lista serwerów)</label>
 
             <h3>Po uruchomieniu gry</h3>
             <div class="row">
@@ -156,6 +224,13 @@
 
           <!-- Wygląd -->
           <section class="page" data-page="look" hidden>
+            <h3>Język</h3>
+            <div class="row">
+              <select id="lang">
+                <option value="en">English</option>
+                <option value="pl">Polski</option>
+              </select>
+            </div>
             <h3>Tło launchera</h3>
             <img id="bg-preview" alt="">
             <div class="row">
@@ -196,7 +271,7 @@
             <div class="about">
               <img src="assets/icon.png" alt="" class="about-icon">
               <div>
-                <div class="about-name">Minecraft Launcher by xBobersonx</div>
+                <div class="about-name">BobrMC — launcher by xBobersonx</div>
                 <div class="note">Wersja <span id="about-version"></span></div>
               </div>
             </div>
@@ -271,7 +346,7 @@
   <div class="overlay" id="modpacks" hidden>
     <div class="dialog glass mods-dialog">
       <div class="panel-title">
-        <span>📦 Modpacki z Modrinth</span>
+        <span>Modpacki z Modrinth</span>
         <button id="btn-close-modpacks" class="title-btn close" title="Zamknij">✕</button>
       </div>
       <div class="mods-toolbar">
@@ -288,7 +363,7 @@
   <div class="overlay" id="servers" hidden>
     <div class="dialog glass mods-dialog">
       <div class="panel-title">
-        <span>🌐 Serwery</span>
+        <span>Serwery</span>
         <button id="btn-close-servers" class="title-btn close" title="Zamknij">✕</button>
       </div>
       <form class="servers-add" id="servers-add">
@@ -318,8 +393,9 @@
     </div>
   </div>
 
+  <script src="i18n.js"></script>
   <script src="background.js"></script>
-  <script src="logo.js"></script>
   <script src="renderer.js"></script>
+  <script src="home.js"></script>
 </body>
 </html>

@@ -77,5 +77,25 @@
     "betterf3",
     "armor-hud",
     "health-indicators"
+  ],
+  "forge": {
+    "1.8.9": {
+      "build": "1.8.9-11.15.1.2318-1.8.9",
+      "name": "xBobersonx PvP",
+      "mods": [
+        "patcher",
+        "entityculling",
+        "animations",
+        "polysprint",
+        "evergreenhud",
+        "chatting",
+        "crashpatch",
+        "3dskinlayers"
+      ]
+    }
+  },
+  "bundled": [
+    { "project": "bobrconfig", "file": "bundled/bobr-config-0.1.0-1.21.11.jar", "versions": ["1.21.11"] },
+    { "project": "bobrconfig", "file": "bundled/bobr-config-0.1.0-1.8.9.jar", "versions": ["1.8.9"] }
   ]
 }

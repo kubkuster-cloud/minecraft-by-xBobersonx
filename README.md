@@ -1,4 +1,6 @@
-# Minecraft Launcher by xBobersonx
+# BobrMC
+
+Launcher Minecrafta by xBobersonx (wcześniej „Minecraft by xBobersonx”).
 
 Launcher do Minecrafta w stylu starego „Minecraft by Zyczu”, z wbudowaną paczką modów **xBobersonx Mods** na Fabric.
 
@@ -31,8 +33,8 @@ Launcher do Minecrafta w stylu starego „Minecraft by Zyczu”, z wbudowaną pa
 
 Gotowe pliki `.exe` znajdziesz w zakładce **Releases**:
 
-- `MinecraftByXBobersonx-Setup-<wersja>.exe` — instalator (skrót na pulpicie, automatyczne aktualizacje)
-- `MinecraftByXBobersonx-Portable.exe` — wersja bez instalacji (bez automatycznych aktualizacji)
+- `BobrMC-Setup-<wersja>.exe` — instalator (skrót na pulpicie, automatyczne aktualizacje)
+- `BobrMC-Portable.exe` — wersja bez instalacji (bez automatycznych aktualizacji)
 
 > Pliki nie mają podpisu cyfrowego, więc Windows SmartScreen może wyświetlić ostrzeżenie — kliknij **Więcej informacji → Uruchom mimo to**.
 
@@ -50,7 +52,7 @@ npm run dist     # buduje pliki .exe do folderu dist/
 
 1. Zmień `version` w `package.json` (np. `1.1.0` → `1.2.0`) i zbuduj: `npm run dist`
 2. Na GitHubie: **Releases → Draft a new release**, tag `v<wersja>`
-3. Dodaj z folderu `dist/` pliki: `MinecraftByXBobersonx-Setup-<wersja>.exe`, `MinecraftByXBobersonx-Setup-<wersja>.exe.blockmap`, `latest.yml` (oraz opcjonalnie wersję portable)
+3. Dodaj z folderu `dist/` pliki: `BobrMC-Setup-<wersja>.exe`, `BobrMC-Setup-<wersja>.exe.blockmap`, `latest.yml` (oraz opcjonalnie wersję portable)
 4. **Publish release** — zainstalowane launchery pobiorą aktualizację przy następnym uruchomieniu
 
 ## Zmiana listy modów

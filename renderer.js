@@ -32,9 +32,10 @@ function persist() {
   window.api.saveSettings(settings);
 }
 
-// Najpierw zainstalowane modpacki, potem paczka xBobersonx dla każdej wersji obsługiwanej przez Fabric.
+// Najpierw zainstalowane modpacki, potem paczka xBobersonx dla każdej wersji obsługiwanej przez Fabric
+// i wersje na Forge z własną paczką (forgeVersions: { "1.8.9": "xBobersonx PvP" }).
 // onlyInstalled: bez internetu pokazujemy tylko wersje, które już są pobrane
-function fillVersions(versions, fabricVersions, packName, onlyInstalled, modpacks = []) {
+function fillVersions(versions, fabricVersions, packName, onlyInstalled, modpacks = [], forgeVersions = {}) {
   const select = $("version");
   select.innerHTML = "";
   for (const mp of modpacks) {
@@ -44,11 +45,12 @@ function fillVersions(versions, fabricVersions, packName, onlyInstalled, modpack
     select.appendChild(opt);
   }
   for (const v of versions) {
-    if (v.type !== "release" || !fabricVersions.has(v.id)) continue;
+    const forgePackName = forgeVersions[v.id];
+    if (v.type !== "release" || !(fabricVersions.has(v.id) || forgePackName)) continue;
     if (onlyInstalled && !onlyInstalled.includes(v.id)) continue;
     const opt = document.createElement("option");
     opt.value = `${v.id}|pack`;
-    opt.textContent = `Minecraft ${v.id} – ${packName}`;
+    opt.textContent = forgePackName ? `Minecraft ${v.id} – ${forgePackName} (Forge)` : `Minecraft ${v.id} – ${packName}`;
     select.appendChild(opt);
   }
   if (settings.version && select.querySelector(`option[value="${settings.version}"]`)) {
@@ -71,9 +73,9 @@ const DEFAULT_HEAD = [
 ];
 const HEAD_COLORS = { H: "#3b2a1a", S: "#b98a6a", s: "#a9785a", W: "#ffffff", B: "#4a3a8a", N: "#8a5a40", M: "#6a3a2a" };
 
-// Rysuje głowę na obu płótnach: obok nicku (24 px) i w karcie konta w ustawieniach (64 px)
+// Rysuje głowę na płótnach: karta Konto na Home, avatar w bocznym pasku i karta konta w ustawieniach
 function drawHead(skinUrl) {
-  const canvases = [$("head"), $("account-head")];
+  const canvases = [$("head"), $("side-head"), $("account-head")];
   const drawDefault = () => {
     for (const c of canvases) {
       const ctx = c.getContext("2d");
@@ -108,10 +110,28 @@ function setAccount(name, skin, offline) {
   drawHead(name ? skin : null);
   $("account-name").textContent = name || $("nick").value.trim() || "—";
   $("account").textContent = name ? `Konto Microsoft${offline ? " (offline)" : ""}` : "Konto non-premium";
+  $("account-kind").textContent = $("account").textContent;
   $("btn-logout").hidden = !name;
+  $("home-logout").hidden = !name;
   $("nick").disabled = !!name;
   if (name) $("nick").value = name;
+  accountSkin = name ? skin : null;
   renderAccounts();
+  homeRefresh("account");
+}
+
+// Skin aktywnego konta Microsoft (adres) — Home rysuje z niego całą postać
+let accountSkin = null;
+
+// Home (home.js) odświeża swoje karty, gdy zmieni się konto, wersja albo skończy się gra
+function homeRefresh(what) {
+  if (window.Home) window.Home.refresh(what);
+}
+
+// „Graj 1.21.11” — na przycisku widać, którą wersję uruchomi
+function playLabel() {
+  const version = ($("version").value || "").split("|")[0];
+  return /^\d/.test(version) ? `Graj ${version}` : "Graj";
 }
 
 // ---------- Zapisane konta ----------
@@ -276,17 +296,21 @@ async function init() {
   });
 
   await loadVersions();
+  if (window.Home) window.Home.start(); // Home startuje, gdy są już ustawienia i lista wersji
 }
 
 // Lista wersji (też po instalacji/usunięciu modpacka); select = wpis do zaznaczenia
 async function loadVersions(select) {
   try {
-    const [{ versions, offline, installed, modpacks }, fabric, packName] = await Promise.all([
+    const [{ versions, offline, installed, modpacks }, fabric, packName, forge] = await Promise.all([
       window.api.listVersions(),
       window.api.fabricVersions().catch(() => []),
       window.api.packName(),
+      window.api.forgeVersions().catch(() => ({})),
     ]);
-    fillVersions(versions, new Set(fabric), packName, offline ? installed : null, modpacks);
+    fillVersions(versions, new Set(fabric), packName, offline ? installed : null, modpacks, forge);
+    if (!$("btn-play").disabled) $("play-label").textContent = playLabel();
+    homeRefresh("version");
     if (select) {
       $("version").value = select;
       persist();
@@ -308,7 +332,11 @@ $("nick").onchange = () => {
   if ($("btn-logout").hidden) $("account-name").textContent = $("nick").value.trim() || "—";
   renderAccounts();
 };
-$("version").onchange = persist;
+$("version").onchange = () => {
+  persist();
+  if (!$("btn-play").disabled) $("play-label").textContent = playLabel();
+  homeRefresh("version");
+};
 // Suwak sięga całej pamięci komputera; podpowiedź ostrzega przed zbyt dużą ilością
 let systemRam = 16;
 
@@ -320,6 +348,8 @@ function recommendedRam() {
 function updateRam() {
   const ram = Number($("ram").value);
   $("ram-val").textContent = `${ram} GB`;
+  const slider = $("ram");
+  slider.style.setProperty("--fill", `${((ram - slider.min) / (slider.max - slider.min)) * 100}%`);
   document.querySelectorAll(".ram-preset").forEach(b => {
     b.classList.toggle("selected", Number(b.dataset.gb) === ram);
     b.disabled = Number(b.dataset.gb) > systemRam;
@@ -426,7 +456,7 @@ function renderMods() {
     li.className = "empty";
     li.textContent = query ? "Nic nie znaleziono"
       : modsTab === "own" ? "Brak własnych modów — kliknij „Otwórz folder” i wrzuć pliki .jar"
-      : "Mody z paczki pojawią się po pierwszym kliknięciu „Uruchom grę” na tej wersji";
+      : "Mody z paczki pojawią się po pierwszym kliknięciu „Graj” na tej wersji";
     list.appendChild(li);
   }
 
@@ -625,7 +655,7 @@ function section(text) {
 // Zwykły tekst w liście (np. „Szukanie…”, „Nic nie znaleziono”)
 function note(text) {
   const li = section(text);
-  li.style.fontWeight = "normal";
+  li.classList.add("note");
   return li;
 }
 
@@ -782,6 +812,9 @@ $("btn-mods").onclick = async () => {
   modUpdates = new Map();
   // modpack nie ma paczki xBobersonx — jego mody są w zakładce „Własne mody”
   document.querySelector('.tab[data-tab="pre"]').hidden = modsTarget().instance !== "pack";
+  // shadery działają przez Iris, a Iris jest dopiero od 1.16 — na starszych wersjach zakładka by była pusta
+  const minor = Number(modsTarget().version.split(".")[1]);
+  document.querySelector('.tab[data-tab="shader"]').hidden = !!minor && minor < 16;
   setModsTab("own");
   $("mods").hidden = false;
   await loadMods();
@@ -833,8 +866,9 @@ $("btn-logout").onclick = async () => {
   setAccount(null);
 };
 
-// server = adres serwera, na który gra wchodzi od razu po starcie
-async function startGame(server) {
+// server = adres serwera, na który gra wchodzi od razu po starcie;
+// world = folder świata (Minecraft 1.20+), do którego gra wchodzi od razu
+async function startGame(server, world) {
   const nick = $("nick").value.trim();
   if (!NICK_RE.test(nick)) {
     setStatus("Nick: 3–16 znaków, litery, cyfry lub _");
@@ -859,6 +893,7 @@ async function startGame(server) {
       javaArgs: settings.javaArgs || "",
       syncOptions: settings.syncOptions !== false,
       server,
+      world,
     });
   } catch (err) {
     setStatus("Błąd uruchamiania — szczegóły w ustawieniach (⚙)");
@@ -873,7 +908,7 @@ function setPlaying(on) {
   $("btn-play").disabled = on;
   $("account-switch").disabled = on;
   $("account-menu").hidden = true;
-  $("play-label").textContent = on ? "Uruchamianie…" : "Uruchom grę";
+  $("play-label").textContent = on ? "Uruchamianie…" : playLabel();
 }
 
 const STAGES = {
@@ -900,6 +935,7 @@ window.api.on("game:closed", code => {
   setStatus(code === 0 || code === null ? "" : `Gra zamknięta (kod ${code})`);
   document.querySelector(".progress").hidden = true;
   setPlaying(false);
+  homeRefresh("played");
 });
 
 // ---------- Okno „Gra się wysypała” ----------
@@ -1073,7 +1109,7 @@ function modpackRow(mp) {
   play.onclick = async () => {
     await loadVersions(`${mp.gameVersion}|mp:${mp.slug}`);
     $("modpacks").hidden = true;
-    setStatus(`Wybrano ${mp.title} — kliknij „Uruchom grę”`);
+    setStatus(`Wybrano ${mp.title} — kliknij „Graj”`);
   };
   const del = document.createElement("button");
   del.textContent = "Usuń";
@@ -1122,7 +1158,7 @@ async function runModpackInstall(install) {
     if (!info) return "";
     await loadVersions(`${info.gameVersion}|mp:${info.slug}`);
     await loadModpacks();
-    return `Zainstalowano ${info.title} (Minecraft ${info.gameVersion}) — wybrany na liście wersji, kliknij „Uruchom grę”`;
+    return `Zainstalowano ${info.title} (Minecraft ${info.gameVersion}) — wybrany na liście wersji, kliknij „Graj”`;
   } finally {
     modpackInstalling = false;
     $("modpacks-progress").hidden = true;
@@ -1340,5 +1376,71 @@ $("btn-bg-reset").onclick = async () => {
   setBackground(null);
 };
 window.api.getBackground().then(url => setBackground(url));
+
+// Język: angielski domyślnie, polski do wyboru (tłumaczy i18n.js)
+$("lang").value = I18N.lang;
+window.api.setLang(I18N.lang);
+$("lang").onchange = () => {
+  const lang = $("lang").value;
+  try { localStorage.setItem("lang", lang); } catch {}
+  I18N.apply(lang);
+  window.api.setLang(lang);
+};
+
+// Boczny pasek: jedno okno naraz, podświetlony przycisk otwartego okna
+const PAGES = { "btn-modpacks": "modpacks", "btn-mods": "mods", "btn-servers": "servers", "btn-settings": "settings" };
+const overlays = [...document.querySelectorAll(".overlay")];
+function closeOverlays() {
+  overlays.forEach(o => { o.hidden = true; });
+  $("account-menu").hidden = true;
+}
+function syncSidebar() {
+  let active = "btn-home";
+  for (const [btn, page] of Object.entries(PAGES)) if (!$(page).hidden) active = btn;
+  if (!$("disk").hidden) active = "btn-settings";
+  const settingsPage = document.querySelector(".nav-item.active");
+  if (active === "btn-settings" && settingsPage && settingsPage.dataset.page === "account") active = "btn-account";
+  document.querySelectorAll(".side-btn").forEach(b => b.classList.toggle("active", b.id === active));
+  // nazwa otwartej zakładki w pasku tytułu (podpis przycisku jest już przetłumaczony)
+  const tip = $(active).querySelector(".tip");
+  if (tip) $("page-title").textContent = tip.textContent;
+}
+$("sidebar").addEventListener("click", e => { if (e.target.closest(".side-btn")) closeOverlays(); }, true);
+$("btn-home").onclick = closeOverlays;
+$("btn-account").onclick = () => showSettingsPage("account");
+new MutationObserver(syncSidebar).observe(document.body, { subtree: true, attributes: true, attributeFilter: ["hidden", "class"] });
+
+// ---------- Home: pasek tytułu, data, skróty ----------
+$("tb-settings").onclick = () => { closeOverlays(); $("btn-settings").click(); };
+$("tb-search").onclick = () => {
+  closeOverlays();
+  $("btn-mods").click();
+  setTimeout(() => $("mods-search").focus(), 50);
+};
+$("home-accounts").onclick = () => showSettingsPage("account");
+$("home-logout").onclick = () => $("btn-logout").click();
+$("servers-all").onclick = () => $("btn-servers").click();
+
+function showDate() {
+  const locale = I18N.lang === "pl" ? "pl-PL" : "en-GB";
+  $("home-date").textContent = new Date().toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "short" }).replace(/\.$/, ""); // „lis.” → „lis”
+}
+showDate();
+$("lang").addEventListener("change", showDate);
+
+// Własny pasek tytułu (okno bez ramki). Przy frame: false Windows sam nie maksymalizuje okna
+// po podwójnym kliknięciu, więc robi to launcher.
+$("win-min").onclick = () => window.api.minimizeWindow();
+$("win-max").onclick = () => window.api.toggleMaximizeWindow();
+$("win-close").onclick = () => window.api.closeWindow();
+$("titlebar").addEventListener("dblclick", e => {
+  if (!e.target.closest(".window-controls")) window.api.toggleMaximizeWindow();
+});
+function showMaximized(maximized) {
+  document.body.classList.toggle("maximized", maximized);
+  $("win-max").title = maximized ? "Przywróć" : "Maksymalizuj";
+}
+window.api.on("window:maximized", showMaximized);
+window.api.isWindowMaximized().then(showMaximized);
 
 init();

@@ -1,5 +1,6 @@
 // Wbudowana paczka modów: pobiera mody z modpack.json z Modrinth,
-// w wersji pasującej do wybranego Minecrafta (Fabric), razem z wymaganymi zależnościami.
+// w wersji pasującej do wybranego Minecrafta, razem z wymaganymi zależnościami.
+// Nowe wersje gry działają na Fabric; wersje z sekcji „forge” (np. 1.8.9) — na Forge z własną paczką.
 
 const fs = require("fs");
 const path = require("path");
@@ -12,7 +13,42 @@ const PACK = require("./modpack.json");
 const PARALLEL = 8;
 const DISABLED = ".disabled";
 const RECHECK_MS = 6 * 60 * 60 * 1000; // paczkę sprawdzamy w Modrinth najwyżej co 6 godzin
-const PACK_LOGIC = 2; // zmiana sposobu składania paczki — wymusza jej ponowne sprawdzenie
+const PACK_LOGIC = 3; // zmiana sposobu składania paczki — wymusza jej ponowne sprawdzenie
+
+// Wersja gry na Forge (np. 1.8.9): { build, name, mods } z modpack.json, inaczej null
+function forgePack(gameVersion) {
+  return (PACK.forge && PACK.forge[gameVersion]) || null;
+}
+
+function loaderFor(gameVersion) {
+  return forgePack(gameVersion) ? "forge" : "fabric";
+}
+
+// Lista modów paczki dla danej wersji gry
+function packFor(gameVersion) {
+  const forge = forgePack(gameVersion);
+  return forge
+    ? { name: forge.name, libraries: [], mods: forge.mods }
+    : { name: PACK.name, libraries: PACK.libraries, mods: PACK.mods };
+}
+
+// Mody dołączone do launchera (np. Bobr Config — nie ma go w Modrinth) dla danej wersji gry.
+// Plik jest w paczce aplikacji, więc mod aktualizuje się razem z launcherem.
+function bundledFor(gameVersion) {
+  return (PACK.bundled || [])
+    .filter(b => b.versions.includes(gameVersion))
+    .map(b => {
+      const data = fs.readFileSync(path.join(__dirname, b.file)); // działa też z wnętrza app.asar
+      return { name: path.basename(b.file), project: b.project, id: b.project, data, sha1: crypto.createHash("sha1").update(data).digest("hex") };
+    });
+}
+
+// Folder modów paczki: Fabric dostaje go przez -Dfabric.addMods, Forge sam czyta mods/<wersja gry>/
+function packModsDir(instanceDir, gameVersion) {
+  return forgePack(gameVersion)
+    ? path.join(instanceDir, "mods", gameVersion)
+    : path.join(instanceDir, "mods", "preinstalled");
+}
 
 async function getJson(url) {
   const res = await fetch(url, { headers: HEADERS });
@@ -23,7 +59,7 @@ async function getJson(url) {
 
 // Wszystkie wersje moda dla danej wersji gry, od najnowszej
 async function listVersions(project, gameVersion) {
-  const query = `loaders=${encodeURIComponent('["fabric"]')}&game_versions=${encodeURIComponent(`["${gameVersion}"]`)}`;
+  const query = `loaders=${encodeURIComponent(`["${loaderFor(gameVersion)}"]`)}&game_versions=${encodeURIComponent(`["${gameVersion}"]`)}`;
   return (await getJson(`${API}/project/${project}/version?${query}`)) || [];
 }
 
@@ -269,12 +305,14 @@ function removeLegacyPack(instanceDir) {
   fs.rmSync(legacyList, { force: true });
 }
 
-// Instaluje paczkę do <instanceDir>/mods/preinstalled i zwraca ten folder
-// (gra dostaje go przez -Dfabric.addMods). W samym mods/ zostają tylko mody gracza.
+// Instaluje paczkę do <instanceDir>/mods/preinstalled (Fabric) albo mods/<wersja> (Forge) i zwraca ten folder
+// (Fabric dostaje go przez -Dfabric.addMods). W samym mods/ zostają tylko mody gracza.
 // Stare wersje modów z paczki są usuwane (lista w .xbobersonx-pack.json).
 async function installPack(instanceDir, gameVersion, { log, progress }) {
   removeLegacyPack(instanceDir);
-  const modsDir = path.join(instanceDir, "mods", "preinstalled");
+  const pack = packFor(gameVersion);
+  const forge = !!forgePack(gameVersion);
+  const modsDir = packModsDir(instanceDir, gameVersion);
   // lista poza preinstalled/, bo Fabric ostrzega o plikach innych niż .jar w tym folderze
   const listFile = path.join(instanceDir, ".xbobersonx-pack.json");
   fs.mkdirSync(modsDir, { recursive: true });
@@ -283,7 +321,16 @@ async function installPack(instanceDir, gameVersion, { log, progress }) {
 
   // Paczka sprawdzana niedawno (i lista modów się nie zmieniła) — nie pytamy Modrinth znowu
   const checkFile = path.join(instanceDir, ".xbobersonx-pack-check.json");
-  const packHash = crypto.createHash("sha1").update(JSON.stringify(PACK) + PACK_LOGIC).digest("hex");
+  let bundled = [];
+  try {
+    bundled = bundledFor(gameVersion);
+  } catch (err) {
+    log(`[paczka] Nie udało się odczytać modów dołączonych do launchera: ${err.message}`);
+  }
+  // nowa wersja dołączonego moda (po aktualizacji launchera) też wymusza ponowne sprawdzenie
+  const packHash = crypto.createHash("sha1")
+    .update(JSON.stringify(pack) + PACK_LOGIC + bundled.map(b => b.sha1).join(","))
+    .digest("hex");
   const complete = packComplete(instanceDir, modsDir);
   let check = {};
   try { check = JSON.parse(fs.readFileSync(checkFile, "utf8")); } catch {}
@@ -295,7 +342,7 @@ async function installPack(instanceDir, gameVersion, { log, progress }) {
   log(`[paczka] Sprawdzanie modów dla ${gameVersion}...`);
   let files;
   try {
-    files = await resolve([...PACK.libraries, ...PACK.mods], gameVersion, log);
+    files = await resolve([...pack.libraries, ...pack.mods], gameVersion, log);
   } catch (err) {
     // brak internetu albo Modrinth nie działa — gramy na tym, co już jest pobrane
     if (!complete) throw new Error("Brak połączenia z Modrinth — tę wersję trzeba raz uruchomić z internetem");
@@ -317,8 +364,21 @@ async function installPack(instanceDir, gameVersion, { log, progress }) {
     progress({ type: "mods", task: ++done, total: files.length });
   });
 
-  await fixExactDeps(files, modsDir, log);
-  dropIncompatible(files, modsDir, gameVersion, log);
+  // obie poprawki czytają fabric.mod.json — mody Forge go nie mają
+  if (!forge) {
+    await fixExactDeps(files, modsDir, log);
+    dropIncompatible(files, modsDir, gameVersion, log);
+  }
+
+  // mody dołączone do launchera — kopiowane z aplikacji zamiast pobierania
+  for (const b of bundled) {
+    const target = path.join(modsDir, b.name);
+    if (!fs.existsSync(target) || sha1(target) !== b.sha1) {
+      fs.writeFileSync(target, b.data);
+      log(`[paczka] Dodano ${b.name}`);
+    }
+    files.push({ name: b.name, project: b.project, id: b.id, sha1: b.sha1 });
+  }
 
   // sprzątanie dopiero po fixExactDeps, żeby nie kasować podmienionych wersji
   const wanted = new Set(files.map(f => f.name));
@@ -327,7 +387,8 @@ async function installPack(instanceDir, gameVersion, { log, progress }) {
   }
 
   // biblioteka = wpisana w „libraries” albo dobrana automatycznie jako zależność
-  const list = files.map(f => ({ name: f.name, project: f.project, id: f.id, library: !PACK.mods.includes(f.project) }));
+  const own = new Set(bundled.map(b => b.project));
+  const list = files.map(f => ({ name: f.name, project: f.project, id: f.id, library: !pack.mods.includes(f.project) && !own.has(f.project) }));
   fs.writeFileSync(listFile, JSON.stringify(list, null, 2));
 
   const disabled = readDisabled(instanceDir);
@@ -382,8 +443,16 @@ function describe(file) {
   if (!infoCache.has(key)) {
     let info = null;
     try {
-      const meta = JSON.parse(new AdmZip(file).readAsText("fabric.mod.json"));
-      info = { title: meta.name || meta.id, version: meta.version, modId: meta.id };
+      const zip = new AdmZip(file);
+      if (zip.getEntry("fabric.mod.json")) {
+        const meta = JSON.parse(zip.readAsText("fabric.mod.json"));
+        info = { title: meta.name || meta.id, version: meta.version, modId: meta.id };
+      } else if (zip.getEntry("mcmod.info")) {
+        // Forge 1.8.9: lista modów albo { modList: [...] }
+        const raw = JSON.parse(zip.readAsText("mcmod.info"));
+        const meta = (Array.isArray(raw) ? raw : raw.modList || [])[0];
+        if (meta) info = { title: meta.name || meta.modid, version: meta.version, modId: meta.modid };
+      }
     } catch {}
     infoCache.set(key, info);
   }
@@ -398,10 +467,10 @@ function entry(dir, jarName, extra) {
   return { file: jarName, enabled, ...info, ...extra };
 }
 
-// Mody gracza (mods/) i mody z paczki (mods/preinstalled) danej wersji
-function listMods(instanceDir) {
+// Mody gracza (mods/) i mody z paczki (mods/preinstalled albo mods/<wersja> na Forge) danej wersji
+function listMods(instanceDir, gameVersion) {
   const ownDir = path.join(instanceDir, "mods");
-  const preDir = path.join(ownDir, "preinstalled");
+  const preDir = packModsDir(instanceDir, gameVersion);
   const own = fs.existsSync(ownDir)
     ? fs.readdirSync(ownDir)
         .filter(n => n.endsWith(".jar") || n.endsWith(".jar" + DISABLED))
@@ -414,7 +483,7 @@ function listMods(instanceDir) {
 }
 
 // Włącza/wyłącza mod. Wyłączony mod dostaje końcówkę .disabled — Fabric go pomija, plik zostaje.
-function setModEnabled(instanceDir, tab, key, enabled) {
+function setModEnabled(instanceDir, tab, key, enabled, gameVersion) {
   const ownDir = path.join(instanceDir, "mods");
   try {
     if (tab === "own") {
@@ -426,7 +495,7 @@ function setModEnabled(instanceDir, tab, key, enabled) {
     const disabled = readDisabled(instanceDir);
     if (enabled) disabled.delete(key);
     else disabled.add(key);
-    renameMod(path.join(ownDir, "preinstalled"), mod.name, enabled);
+    renameMod(packModsDir(instanceDir, gameVersion), mod.name, enabled);
     fs.writeFileSync(disabledFile(instanceDir), JSON.stringify([...disabled], null, 2));
   } catch (err) {
     if (err.code === "EBUSY" || err.code === "EPERM") throw new Error("Zamknij grę, zanim zmienisz mody");
@@ -457,7 +526,7 @@ function installedIds(instanceDir) {
 }
 
 async function searchMods(instanceDir, gameVersion, query) {
-  const facets = JSON.stringify([["categories:fabric"], [`versions:${gameVersion}`], ["project_type:mod"]]);
+  const facets = JSON.stringify([[`categories:${loaderFor(gameVersion)}`], [`versions:${gameVersion}`], ["project_type:mod"]]);
   const index = query ? "relevance" : "downloads";
   const data = await getJson(`${API}/search?limit=30&index=${index}&query=${encodeURIComponent(query)}&facets=${encodeURIComponent(facets)}`);
   const installed = installedIds(instanceDir);
@@ -565,6 +634,6 @@ async function updateOwnMod(instanceDir, gameVersion, file, log) {
 }
 
 module.exports = {
-  installPack, packName: PACK.name, listMods, setModEnabled, searchMods, installOwnMod,
+  installPack, packName: PACK.name, forgePack, packFor, packModsDir, listMods, setModEnabled, searchMods, installOwnMod,
   checkOwnUpdates, updateOwnMod, pool, sha1,
 };

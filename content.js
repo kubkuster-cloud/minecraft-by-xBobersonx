@@ -72,19 +72,27 @@ function optionsFile(instanceDir) {
   return path.join(instanceDir, "options.txt");
 }
 
-function readResourcePacks(instanceDir) {
+// Do 1.12 gra zapisuje paczkę w options.txt samą nazwą pliku, od 1.13 jako „file/nazwa”
+function packId(gameVersion, name) {
+  const minor = Number(String(gameVersion || "").split(".")[1]);
+  return minor && minor < 13 ? name : `file/${name}`;
+}
+
+function readResourcePacks(instanceDir, gameVersion) {
+  // stare wersje gry nie mają wpisu "vanilla" — tam pusta lista to same domyślne tekstury
+  const none = packId(gameVersion, "x") === "x" ? [] : ["vanilla"];
   try {
     const line = fs.readFileSync(optionsFile(instanceDir), "utf8").split(/\r?\n/).find(l => l.startsWith("resourcePacks:"));
-    return line ? JSON.parse(line.slice("resourcePacks:".length)) : ["vanilla"];
+    return line ? JSON.parse(line.slice("resourcePacks:".length)) : none;
   } catch {
-    return ["vanilla"];
+    return none;
   }
 }
 
 // Włączona paczka trafia na koniec listy, czyli ma najwyższy priorytet
-function setResourcePack(instanceDir, name, enabled) {
-  const id = `file/${name}`;
-  const packs = readResourcePacks(instanceDir).filter(p => p !== id);
+function setResourcePack(instanceDir, gameVersion, name, enabled) {
+  const id = packId(gameVersion, name);
+  const packs = readResourcePacks(instanceDir, gameVersion).filter(p => p !== id);
   if (enabled) packs.push(id);
   const line = `resourcePacks:${JSON.stringify(packs)}`;
 
@@ -98,29 +106,29 @@ function setResourcePack(instanceDir, name, enabled) {
 
 // ---------- Wspólne ----------
 
-function listContent(instanceDir, type) {
+function listContent(instanceDir, gameVersion, type) {
   const dir = folderOf(instanceDir, type);
   if (!fs.existsSync(dir)) return [];
   const active = type === "shader" ? activeShader(instanceDir) : null;
-  const packs = type === "resourcepack" ? new Set(readResourcePacks(instanceDir)) : null;
+  const packs = type === "resourcepack" ? new Set(readResourcePacks(instanceDir, gameVersion)) : null;
   return fs.readdirSync(dir, { withFileTypes: true })
     .filter(e => e.isDirectory() || e.name.endsWith(".zip"))
     .map(e => ({
       file: e.name,
       title: e.name.replace(/\.zip$/, ""),
-      enabled: type === "shader" ? e.name === active : packs.has(`file/${e.name}`),
+      enabled: type === "shader" ? e.name === active : packs.has(packId(gameVersion, e.name)),
     }))
     .sort((a, b) => a.title.localeCompare(b.title));
 }
 
-function setContentEnabled(instanceDir, type, file, enabled) {
+function setContentEnabled(instanceDir, gameVersion, type, file, enabled) {
   if (type === "shader") setShader(instanceDir, enabled ? file : null);
-  else setResourcePack(instanceDir, file, enabled);
+  else setResourcePack(instanceDir, gameVersion, file, enabled);
 }
 
-function deleteContent(instanceDir, type, file) {
+function deleteContent(instanceDir, gameVersion, type, file) {
   file = path.basename(file); // sama nazwa pliku z shaderpacks/ albo resourcepacks/
-  setContentEnabled(instanceDir, type, file, false);
+  setContentEnabled(instanceDir, gameVersion, type, file, false);
   fs.rmSync(path.join(folderOf(instanceDir, type), file), { recursive: true, force: true });
   const registry = readRegistry(instanceDir);
   if (registry[type]) delete registry[type][file];
@@ -167,7 +175,7 @@ async function installContent(instanceDir, gameVersion, type, id) {
   const registry = readRegistry(instanceDir);
   registry[type] = { ...(registry[type] || {}), [name]: id };
   writeRegistry(instanceDir, registry);
-  setContentEnabled(instanceDir, type, name, true);
+  setContentEnabled(instanceDir, gameVersion, type, name, true);
   return name;
 }
 

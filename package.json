@@ -1,7 +1,7 @@
 {
   "name": "minecraft-by-xbobersonx",
-  "version": "1.13.0",
-  "description": "Minecraft launcher by xBobersonx",
+  "version": "1.14.0",
+  "description": "BobrMC — launcher Minecrafta by xBobersonx",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -22,26 +22,29 @@
   },
   "build": {
     "appId": "pl.xbobersonx.launcher",
-    "productName": "Minecraft by xBobersonx",
+    "productName": "BobrMC",
     "files": [
       "main.js",
       "preload.js",
+      "i18n.js",
       "renderer.js",
       "index.html",
       "style.css",
       "background.js",
-      "logo.js",
       "modpack.js",
       "java.js",
       "content.js",
       "crash.js",
       "disk.js",
       "options.js",
+      "shared.js",
       "mrpack.js",
       "servers.js",
       "modpack.json",
       "default-options.txt",
-      "assets/**"
+      "assets/**",
+      "home.js",
+      "bundled/**"
     ],
     "directories": {
       "output": "dist"
@@ -60,14 +63,14 @@
       "repo": "minecraft-by-xBobersonx"
     },
     "nsis": {
-      "artifactName": "MinecraftByXBobersonx-Setup-${version}.${ext}",
+      "artifactName": "BobrMC-Setup-${version}.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "shortcutName": "Minecraft by xBobersonx"
+      "shortcutName": "BobrMC"
     },
     "portable": {
-      "artifactName": "MinecraftByXBobersonx-Portable.exe"
+      "artifactName": "BobrMC-Portable.exe"
     }
   }
 }

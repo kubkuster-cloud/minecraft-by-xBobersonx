@@ -3,6 +3,15 @@
 
 const fs = require("fs");
 const path = require("path");
+const AdmZip = require("adm-zip");
+
+// Pakiety bibliotek, które mody często mają w sobie — nie wskazują na konkretny mod
+const SHARED_PACKAGES = [
+  "net/minecraft/", "com/mojang/", "net/fabricmc/", "net/minecraftforge/", "org/spongepowered/",
+  "com/llamalad7/", "org/", "com/google/", "kotlin/", "kotlinx/", "javax/", "java/", "io/netty/",
+  "it/unimi/", "okhttp3/", "okio/", "com/electronwill/", "com/typesafe/", "net/jodah/", "dev/architectury/",
+  "META-INF/",
+];
 
 const ACCESS_VIOLATION = -1073741819; // 0xC0000005 — zwykle sterownik karty graficznej
 
@@ -84,6 +93,7 @@ function analyze(log, code, report) {
     for (const m of report.matchAll(/^\s*([a-z0-9_\-]+): .+? \(Suspected\)/gim)) suspects.add(m[1]);
   }
 
+  const generic = !reason;
   if (!reason) {
     reason = report
       ? "Gra się wysypała. Poniżej szczegóły z raportu crasha."
@@ -94,7 +104,53 @@ function analyze(log, code, report) {
 
   // tych nie proponujemy do wyłączenia — to sama gra / loader
   for (const id of ["minecraft", "java", "fabricloader", "fabric", "mixinextras"]) suspects.delete(id);
-  return { reason, suspects: [...suspects], details: details.slice(0, 8) };
+  return { reason, generic, suspects: [...suspects], details: details.slice(0, 8) };
 }
 
-module.exports = { analyze, findCrashReport };
+// Pakiet (folder klas) → id moda, dla wszystkich włączonych modów. Pakiet obecny w kilku modach
+// (np. wspólna biblioteka) nie wskazuje na żaden z nich.
+function packageIndex(mods) {
+  const index = new Map();
+  for (const mod of mods) {
+    let entries;
+    try { entries = new AdmZip(mod.path).getEntries(); } catch { continue; }
+    const dirs = new Set();
+    for (const e of entries) {
+      if (!e.entryName.endsWith(".class")) continue;
+      const dir = path.posix.dirname(e.entryName) + "/";
+      if (SHARED_PACKAGES.some(p => dir.startsWith(p))) continue;
+      dirs.add(dir);
+    }
+    for (const dir of dirs) index.set(dir, index.has(dir) && index.get(dir) !== mod.modId ? null : mod.modId);
+  }
+  return index;
+}
+
+// Mody, w których kodzie gra się wysypała: ramki stosu „at pakiet.Klasa.metoda(”, metody dodane
+// przez mixiny („handler$abc000$modid$...”) i sekcja „Mixins in Stacktrace” z raportu Fabric.
+// Kolejność = kolejność w raporcie (najwyżej na stosie = najbardziej prawdopodobny winny).
+function stackSuspects(text, mods) {
+  const found = [];
+  const add = id => { if (id && !found.includes(id)) found.push(id); };
+  const known = new Set(mods.map(m => m.modId));
+  let index = null;
+  for (const line of text.split(/\r?\n/)) {
+    for (const m of line.matchAll(/\(from mod ([a-z0-9_\-]+)\)/gi)) add(m[1]);
+    for (const m of line.matchAll(/(?:handler|redirect|modify\w*|wrap\w*|localvar|constant)\$[a-z0-9]{6}\$([a-z0-9_\-]+)\$/gi)) {
+      if (known.has(m[1])) add(m[1]);
+    }
+    const frame = /^\s*at (?:[\w.\-]+\/\/)?([\w$.]+)\.[\w$<>]+\(/.exec(line);
+    if (!frame) continue;
+    if (!index) index = packageIndex(mods);
+    let dir = frame[1].split(".").slice(0, -1).join("/") + "/";
+    // od pełnego pakietu w górę, ale nie wyżej niż 2 poziomy (np. com/firma/)
+    while (dir.split("/").length > 3) {
+      if (index.has(dir)) { add(index.get(dir)); break; }
+      dir = dir.replace(/[^/]+\/$/, "");
+    }
+    if (found.length >= 5) break;
+  }
+  return found;
+}
+
+module.exports = { analyze, findCrashReport, stackSuspects };
